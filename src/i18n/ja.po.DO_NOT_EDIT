@@ -1,0 +1,361 @@
+# Japanese translations for GCMZDrops vX.X.X ( unknown ) package.
+# Copyright (C) 2025 GCMZDrops Developers
+# This file is distributed under the same license as the GCMZDrops package.
+# Automatically generated, 2025.
+#
+msgid ""
+msgstr ""
+"Report-Msgid-Bugs-To: \n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "&Add"
+msgstr "追加(&A)"
+
+msgid "&Browse Folder"
+msgstr "フォルダーを選択(&B)"
+
+msgid "&Day"
+msgstr "日(&D)"
+
+msgid "&Enable"
+msgstr "使用する(&E)"
+
+msgid "&Folder:"
+msgstr "フォルダー(&F):"
+
+msgid "&Hour"
+msgstr "時(&H)"
+
+msgid "&Insert Placeholder"
+msgstr "プレースホルダーを挿入(&I)"
+
+msgid "&Make directories automatically"
+msgstr "フォルダーを自動作成する(&M)"
+
+msgid "&Month"
+msgstr "月(&M)"
+
+msgid "&Processing Mode:"
+msgstr "処理モード(&P):"
+
+msgid "&Remove"
+msgstr "削除(&R)"
+
+msgid "&Shared folder for GCMZDrops"
+msgstr "GCMZDrops用の共有フォルダー(&S)"
+
+msgid "&Show debug menu"
+msgstr "デバッグメニューを表示(&S)"
+
+msgid "&Year"
+msgstr "年(&Y)"
+
+msgid "...(&I)"
+msgstr "...(&I)"
+
+msgid "All Files"
+msgstr "すべてのファイル"
+
+msgid "Any dropped files are copied to the save destination before being dropped."
+msgstr "ドロップされるすべてのファイルはドロップ時に保存先へコピーされます。"
+
+msgid "Auto-detect"
+msgstr "自動判定"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Choose Screenshot Save Location"
+msgstr "スクリーンショットの保存先を選択してください"
+
+msgctxt "cleanup_stale_temporary_directories"
+msgid "Cleaning up stale temporary directories..."
+msgstr "古い一時ディレクトリをクリーンアップしています..."
+
+msgctxt "external_api_status"
+msgid "Current Status"
+msgstr "現在のステータス"
+
+msgid "Debug"
+msgstr "デバッグ"
+
+msgctxt "external_api_status"
+msgid "Disabled"
+msgstr "停止中"
+
+msgid "DragEnter hook processing failed"
+msgstr "DragEnter フック処理に失敗しました。"
+
+msgid "EXO file conversion failed, proceeding with original files"
+msgstr "EXOファイルの変換に失敗しました。元のファイルで処理を続行します"
+
+msgid "Error"
+msgstr "エラー"
+
+msgctxt "external_api"
+msgid "Error"
+msgstr "エラー"
+
+msgctxt "external_api_status"
+msgid "Error"
+msgstr "エラー"
+
+msgid "External API"
+msgstr "外部連携API"
+
+msgid "Failed to initialize GCMZDrops."
+msgstr "GCMZDrops の初期化に失敗しました。"
+
+msgctxt "external_api"
+msgid "Failed to initialize external API."
+msgstr "外部連携APIの初期化に失敗しました。"
+
+msgctxt "external_api"
+msgid "Failed to initialize the external API."
+msgstr "外部連携APIの初期化に失敗しました。"
+
+msgid "Failed to save settings."
+msgstr "設定の保存に失敗しました。"
+
+msgid ""
+"Files in system folders (Temp, Program Files, etc.) are copied to the save destination before being dropped.\n"
+"Recommended for normal use."
+msgstr ""
+"システムフォルダー (Temp、Program Files など) にあるファイルはドロップ時に保存先へコピーされます。\n"
+"通常はこちらを推奨します。"
+
+msgid "Files in the Temp folder are copied to the save destination before being dropped."
+msgstr "Temp フォルダーにあるファイルはドロップ時に保存先へコピーされます。"
+
+msgid "Folder containing the &project file being edited"
+msgstr "編集中のプロジェクトファイルがあるフォルダー(&P)"
+
+msgid "GCMZDrops"
+msgstr "GCMZDrops"
+
+msgid "GCMZDrops Settings"
+msgstr "GCMZDrops 設定"
+
+msgid "GCMZDrops Settings..."
+msgstr "GCMZDrops の設定..."
+
+msgid "M&inute"
+msgstr "分(&I)"
+
+msgid "Mi&llisecond"
+msgstr "ミリ秒(&L)"
+
+msgid "Move &Down"
+msgstr "↓(&D)"
+
+msgid "Move &Up"
+msgstr "↑(&U)"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "PNG Image"
+msgstr "PNG画像"
+
+msgid "Please select the destination folder"
+msgstr "保存先フォルダーを選択してください"
+
+msgid "Prefer copy"
+msgstr "コピー優先"
+
+msgid "Prefer direct read"
+msgstr "直接読み込み優先"
+
+msgctxt "external_api"
+msgid "Retry?"
+msgstr "再試行しますか？"
+
+msgctxt "external_api_status"
+msgid "Running"
+msgstr "稼働中"
+
+msgid "S&econd"
+msgstr "秒(&E)"
+
+msgid "Save Destination"
+msgstr "保存先"
+
+msgid "Save Timeline Screenshot (Debug)"
+msgstr "タイムラインのスクリーンショットを保存（デバッグ用）"
+
+msgid ""
+"Specifies where to create files when dropping images from the browser, etc.\n"
+"If multiple paths are registered, they will be tried in order from the top."
+msgstr ""
+"ブラウザーから画像をドロップしたときなどに、どこにファイルを作成するかを指定します。\n"
+"複数のパスを登録しておくと、上から順番に試行します。"
+
+msgctxt "external_api"
+msgid "The external API has been temporarily disabled due to an error."
+msgstr "エラーが発生したため、外部連携APIは一時的に無効化されています。"
+
+msgid ""
+"The plugin could not start correctly.\n"
+"GCMZDrops is unavailable at the moment."
+msgstr ""
+"プラグインを正しく開始できませんでした。\n"
+"GCMZDrops は現在利用できません。"
+
+msgid ""
+"This item cannot be deleted.\n"
+"\n"
+"If none of the registered folders are available, files will be stored in this folder as a last resort."
+msgstr ""
+"この項目は削除できません。\n"
+"\n"
+"登録されたフォルダーがどれも利用できなかった場合に、最後の手段としてこのフォルダーへファイルが格納されます。"
+
+msgctxt "external_api"
+msgid ""
+"This may occur when multiple instances of AviUtl ExEdit2 are running.\n"
+"Please close other instances and click Retry.\n"
+"\n"
+"If you cancel, the plugin will continue without the external API."
+msgstr ""
+"このエラーは、複数の AviUtl ExEdit2 が実行されている場合に発生することがあります。\n"
+"他のインスタンスを閉じて [再試行] をクリックしてください。\n"
+"\n"
+"キャンセルすると、外部連携APIなしで継続します。"
+
+msgid "[GCMZDrops] Paste from Clipboard"
+msgstr "[GCMZDrops] クリップボードから貼り付け"
+
+#, c-format
+msgid "detected AviUtl ExEdit2 version is %1$s"
+msgstr "検出された AviUtl ExEdit2 のバージョンは %1$s です"
+
+#, c-format
+msgid "detected AviUtl ExEdit2 version is %1$s, but signature verification failed. the data may not be from an official release."
+msgstr "検出された AviUtl ExEdit2 のバージョンは %1$s ですが、署名の検証に失敗しました。公式リリースではないデータの可能性があります。"
+
+msgctxt "external_api"
+msgid "external API already exists"
+msgstr "外部連携APIは既に存在しています"
+
+msgctxt "external_api"
+msgid "external API initialized successfully"
+msgstr "外部連携APIが正常に初期化されました。"
+
+msgctxt "external_api"
+msgid "external API is disabled because the AviUtl ExEdit2 version is unknown"
+msgstr "AviUtl ExEdit2 のバージョンが不明なため、外部連携APIは無効化されています。"
+
+msgid "failed to clean up temporary file"
+msgstr "一時ファイルのクリーンアップに失敗しました"
+
+msgctxt "cleanup_stale_temporary_directories"
+msgid "failed to cleanup stale temporary directories"
+msgstr "古い一時ディレクトリのクリーンアップに失敗しました"
+
+msgid "failed to create thread"
+msgstr "スレッドの作成に失敗しました"
+
+msgid "failed to create thread for delayed initialization"
+msgstr "遅延初期化用のスレッドの作成に失敗しました"
+
+msgid "failed to create unique temporary file"
+msgstr "一意な一時ファイルの作成に失敗しました"
+
+msgid "failed to drop from external API request"
+msgstr "外部連携APIリクエストからのドロップに失敗しました"
+
+msgid "failed to get external API setting"
+msgstr "外部連携APIの設定を取得できませんでした"
+
+msgid "failed to initialize condition variable"
+msgstr "条件変数の初期化に失敗しました"
+
+msgid "failed to initialize external API"
+msgstr "外部連携APIの初期化に失敗しました"
+
+msgid "failed to initialize external API, continuing without it."
+msgstr "外部連携APIの初期化に失敗しました。外部連携APIなしで継続します。"
+
+msgid "failed to initialize mutex"
+msgstr "ミューテックスの初期化に失敗しました"
+
+msgid "failed to load language resources, continuing without them."
+msgstr "言語リソースの読み込みに失敗しました。言語リソースなしで継続します。"
+
+msgid "failed to move cursor to target position"
+msgstr "カーソルを目標位置に移動できませんでした"
+
+msgid "failed to paste from clipboard"
+msgstr "クリップボードからの貼り付けに失敗しました"
+
+msgid "failed to perform debug capture"
+msgstr "デバッグキャプチャの実行に失敗しました"
+
+msgid "failed to remove temporary directory"
+msgstr "一時ディレクトリの削除に失敗しました"
+
+msgid "failed to set display zoom"
+msgstr "表示倍率の設定に失敗しました"
+
+msgid "failed to update external API project data"
+msgstr "外部連携APIのプロジェクトデータの更新に失敗しました"
+
+msgid "failed to update external API state"
+msgstr "外部連携APIの状態の更新に失敗しました"
+
+#, c-format
+msgid "invalid hex character at position %1$zu"
+msgstr "位置 %1$zu に無効な16進数文字があります"
+
+msgid "invalid hex character in signature"
+msgstr "署名に無効な16進数文字が含まれています"
+
+#, c-format
+msgid "invalid key length: expected %1$d hex characters, got %2$zu"
+msgstr "無効なキー長: %1$d 文字の16進数が必要ですが、%2$zu 文字でした"
+
+msgid "invalid updated_at timestamp format"
+msgstr "updated_at のタイムスタンプ形式が無効です"
+
+#, c-format
+msgid "maximum number of menu items(%1$d) exceeded"
+msgstr "メニュー項目の最大数 (%1$d) を超えました"
+
+msgid "no signature found in INI file"
+msgstr "INIファイルに署名が見つかりません"
+
+msgid "no updated_at found in global section"
+msgstr "グローバルセクションに updated_at が見つかりません"
+
+#, c-format
+msgctxt "cleanup_stale_temporary_directories"
+msgid "removed: %1$ls"
+msgstr "削除しました: %1$ls"
+
+#, c-format
+msgid "saved timeline screenshot to \"%ls\""
+msgstr "タイムラインのスクリーンショットを \"%1$ls\" に保存しました。"
+
+msgctxt "cleanup_stale_temporary_directories"
+msgid "stale temporary directory cleanup complete"
+msgstr "古い一時ディレクトリのクリーンアップが完了しました。"
+
+msgid "too many AviUtl2 manager windows found"
+msgstr "AviUtl2 マネージャーウィンドウが多すぎます。"
+
+msgid "unknown AviUtl ExEdit2 version detected. some features will be disabled."
+msgstr "不明な AviUtl ExEdit2 のバージョンが検出されました。一部の機能は無効化されます。"
+
+#, c-format
+msgid "unknown processing mode: %1$d"
+msgstr "未知の処理モード: %1$d"
+
+#. trans: This dagger helps UTF-8 detection. You don't need to translate this.
+msgid "†"
+msgstr ""

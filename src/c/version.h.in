@@ -1,0 +1,91 @@
+#pragma once
+
+#include <stdint.h>
+#include <assert.h>
+
+#define GCMZ_VERSION "@_git_tag@ ( @_git_revision@ )"
+#define GCMZ_VERSION_UINT32 @_version_uint32@
+
+struct gcmz_version {
+  uint8_t major;
+  uint8_t minor;
+  uint8_t patch;
+  enum {
+    gcmz_version_alpha = 0,
+    gcmz_version_beta = 1,
+    gcmz_version_rc = 2,
+    gcmz_version_stable = 3,
+  } stage_type;
+  uint8_t stage;
+};
+
+#define GCMZ_VERSION_CONSTANTS_         \
+  major_bits   = 7,                     \
+  major_max    = (1 << major_bits) - 1, \
+  minor_bits   = 8,                     \
+  minor_max    = (1 << minor_bits) - 1, \
+  patch_bits   = 8,                     \
+  patch_max    = (1 << patch_bits) - 1, \
+  stage_bits   = 9,                     \
+  stage_max    = (1 << stage_bits) - 1, \
+  stage_part   = (stage_max - 1) / 3,   \
+  stage_alpha  = stage_part,            \
+  stage_beta   = stage_part * 2,        \
+  stage_stable = stage_max
+
+static inline struct gcmz_version parse_gcmz_version(uint32_t v) {
+  enum { GCMZ_VERSION_CONSTANTS_ };
+  struct gcmz_version result = {
+    .major = (v >> (stage_bits + patch_bits + minor_bits)) & major_max,
+    .minor = (v >> (stage_bits + patch_bits             )) & minor_max,
+    .patch = (v >> (stage_bits                          )) & patch_max,
+  };
+  uint32_t const s = v & stage_max;
+  if (s == stage_stable) {
+    result.stage_type = gcmz_version_stable;
+    result.stage = 0U;
+  } else if (s < stage_alpha) {
+    result.stage_type = gcmz_version_alpha;
+    result.stage = s & 0xff;
+  } else if (s < stage_beta) {
+    result.stage_type = gcmz_version_beta;
+    result.stage = (s - stage_alpha) & 0xff;
+  } else {
+    result.stage_type = gcmz_version_rc;
+    result.stage = (s - stage_beta) & 0xff;
+  }
+  return result;
+}
+
+static inline uint32_t make_gcmz_version(struct gcmz_version const *version) {
+  enum { GCMZ_VERSION_CONSTANTS_ };
+  assert(version->major      <= major_max);
+  assert(version->minor      <= minor_max);
+  assert(version->patch      <= patch_max);
+  assert(version->stage_type <= gcmz_version_stable);
+  uint32_t s = 0U;
+  switch (version->stage_type) {
+  case gcmz_version_alpha:
+    assert(version->stage < stage_alpha);
+    s = version->stage;
+    break;
+  case gcmz_version_beta:
+    assert(version->stage < stage_beta - stage_alpha);
+    s = stage_alpha + version->stage;
+    break;
+  case gcmz_version_rc:
+    assert(version->stage < stage_stable - stage_beta);
+    s = stage_beta + version->stage;
+    break;
+  case gcmz_version_stable:
+    assert(version->stage == 0U);
+    s = stage_stable;
+    break;
+  }
+  return ((uint32_t)(version->major & major_max) << (stage_bits + patch_bits + minor_bits))
+       | ((uint32_t)(version->minor & minor_max) << (stage_bits + patch_bits             ))
+       | ((uint32_t)(version->patch & patch_max) << (stage_bits                          ))
+       | ((uint32_t)(             s & stage_max) << 0U                                    );
+}
+
+#undef GCMZ_VERSION_CONSTANTS_

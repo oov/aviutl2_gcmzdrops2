@@ -1,0 +1,14 @@
+// gcmzdrops.rc
+// Application manifest resource
+
+#define APSTUDIO_HIDDEN_SYMBOLS
+#include <windows.h>
+#undef APSTUDIO_HIDDEN_SYMBOLS
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+1 RT_MANIFEST "gcmzdrops.manifest"
+
+ADDR RCDATA "aviutl2_addr.ini"
+
+101 ICON "../img/icon.ico"

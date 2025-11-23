@@ -1,0 +1,7 @@
+#pragma once
+
+#include <stdint.h>
+
+static uint8_t const g_ini_sign_public_key[] = {
+    @PUBLIC_KEY_BYTES@
+};
