@@ -47,7 +47,7 @@ msgid "&Remove"
 msgstr "删除(&R)"
 
 msgid "&Shared folder for GCMZDrops"
-msgstr "GCMZDrops 共享文件夹(&S)"
+msgstr "GCMZDrops共享文件夹(&S)"
 
 msgid "&Show debug menu"
 msgstr "显示调试菜单(&S)"
@@ -62,7 +62,7 @@ msgid "All Files"
 msgstr "所有文件"
 
 msgid "Any dropped files are copied to the save destination before being dropped."
-msgstr "在放置前，所有文件都将被复制到保存位置。"
+msgstr "所有被拖放的文件在拖放前都会先复制到保存位置。"
 
 msgid "Auto-detect"
 msgstr "自动检测"
@@ -71,11 +71,11 @@ msgid "Cancel"
 msgstr "取消"
 
 msgid "Choose Screenshot Save Location"
-msgstr "选择屏幕截图的保存位置"
+msgstr "选择截图保存位置"
 
 msgctxt "cleanup_stale_temporary_directories"
 msgid "Cleaning up stale temporary directories..."
-msgstr "清理陈旧的临时目录中..."
+msgstr "清理过时的临时目录中..."
 
 msgctxt "external_api_status"
 msgid "Current Status"
@@ -89,10 +89,10 @@ msgid "Disabled"
 msgstr "已禁用"
 
 msgid "DragEnter hook processing failed"
-msgstr "DragEnter 钩子处理失败"
+msgstr "DragEnter钩子处理失败"
 
 msgid "EXO file conversion failed, proceeding with original files"
-msgstr "EXO 文件转换失败，继续使用原始文件"
+msgstr "EXO文件转换失败，继续使用原始文件"
 
 msgid "Error"
 msgstr "错误"
@@ -106,43 +106,43 @@ msgid "Error"
 msgstr "错误"
 
 msgid "External API"
-msgstr "外部 API"
+msgstr "外部API"
 
 msgid "Failed to initialize GCMZDrops."
-msgstr "GCMZDrops 初始化失败。"
+msgstr "GCMZDrops初始化失败。"
 
 msgctxt "external_api"
 msgid "Failed to initialize external API."
-msgstr "外部 API 初始化失败。"
+msgstr "外部API初始化失败。"
 
 msgctxt "external_api"
 msgid "Failed to initialize the external API."
-msgstr "外部 API 初始化失败。"
+msgstr "外部API初始化失败。"
 
 msgid "Failed to save settings."
-msgstr "保存设置失败。"
+msgstr "设置保存失败。"
 
 msgid ""
 "Files in system folders (Temp, Program Files, etc.) are copied to the save destination before being dropped.\n"
 "Recommended for normal use."
 msgstr ""
-"在放置前，系统文件夹（Temp、Program Files 等）中的文件将被复制到保存位置。\n"
-"建议日常使用此模式。"
+"系统文件夹（Temp，Program Files等）中的文件在拖放前会先复制到保存位置。\n"
+"推荐正常使用时使用此模式。"
 
 msgid "Files in the Temp folder are copied to the save destination before being dropped."
-msgstr "在放置前，Temp 文件夹中的文件将被复制到保存位置。"
+msgstr "Temp文件夹中的文件在拖放前会先复制到保存位置。"
 
 msgid "Folder containing the &project file being edited"
-msgstr "正在编辑的项目文件所在文件夹(&P)"
+msgstr "编辑中工程文件所在文件夹(&P)"
 
 msgid "GCMZDrops"
 msgstr "GCMZDrops"
 
 msgid "GCMZDrops Settings"
-msgstr "GCMZDrops 设置"
+msgstr "GCMZDrops设置"
 
 msgid "GCMZDrops Settings..."
-msgstr "GCMZDrops 设置..."
+msgstr "GCMZDrops设置..."
 
 msgid "M&inute"
 msgstr "分(&I)"
@@ -160,7 +160,7 @@ msgid "OK"
 msgstr "确定"
 
 msgid "PNG Image"
-msgstr "PNG 图像"
+msgstr "PNG图像"
 
 msgid "Please select the destination folder"
 msgstr "请选择目标文件夹"
@@ -173,7 +173,7 @@ msgstr "优先直接读取"
 
 msgctxt "external_api"
 msgid "Retry?"
-msgstr "重试？"
+msgstr "是否重试？"
 
 msgctxt "external_api_status"
 msgid "Running"
@@ -186,25 +186,25 @@ msgid "Save Destination"
 msgstr "保存位置"
 
 msgid "Save Timeline Screenshot (Debug)"
-msgstr "保存时间轴屏幕截图（调试用）"
+msgstr "保存时间轴截图（调试）"
 
 msgid ""
 "Specifies where to create files when dropping images from the browser, etc.\n"
 "If multiple paths are registered, they will be tried in order from the top."
 msgstr ""
-"指定从浏览器等拖放图像时创建文件的位置。\n"
-"如果注册了多个路径，将从上到下依次尝试。"
+"指定从浏览器等处拖放图像时创建文件的位置。\n"
+"若注册了多个路径，将按从上到下的顺序依次尝试。"
 
 msgctxt "external_api"
 msgid "The external API has been temporarily disabled due to an error."
-msgstr "由于错误，外部 API 已被暂时禁用。"
+msgstr "由于发生错误，外部API已被临时禁用。"
 
 msgid ""
 "The plugin could not start correctly.\n"
 "GCMZDrops is unavailable at the moment."
 msgstr ""
 "插件无法正确启动。\n"
-"GCMZDrops 暂时不可用。"
+"GCMZDrops暂时不可用。"
 
 msgid ""
 "This item cannot be deleted.\n"
@@ -213,7 +213,7 @@ msgid ""
 msgstr ""
 "无法删除此项。\n"
 "\n"
-"如果所有注册的文件夹都不可用，文件将作为最后手段保存在此文件夹中。"
+"若所有注册的文件夹都不可用，作为最后的手段，文件将存储在此文件夹中。"
 
 msgctxt "external_api"
 msgid ""
@@ -222,91 +222,91 @@ msgid ""
 "\n"
 "If you cancel, the plugin will continue without the external API."
 msgstr ""
-"当运行多个 AviUtl ExEdit2 实例时可能会发生此情况。\n"
-"请关闭其他实例，然后单击\"重试\"。\n"
+"当有多个AviUtl ExEdit2实例运行时可能会出现此问题。\n"
+"请关闭其他实例并点击“重试”。\n"
 "\n"
-"如果取消，插件将在不使用外部 API 的情况下继续运行。"
+"若取消，插件将在没有外部API的情况下继续运行。"
 
 msgid "[GCMZDrops] Paste from Clipboard"
-msgstr "[GCMZDrops] 从剪贴板粘贴"
+msgstr "[GCMZDrops]从剪贴板粘贴"
 
 #, c-format
 msgid "detected AviUtl ExEdit2 version is %1$s"
-msgstr "检测到的 AviUtl ExEdit2 版本是 %1$s"
+msgstr "检测到AviUtl ExEdit2版本为 %1$s"
 
 #, c-format
 msgid "detected AviUtl ExEdit2 version is %1$s, but signature verification failed. the data may not be from an official release."
-msgstr "检测到的 AviUtl ExEdit2 版本是 %1$s，但签名验证失败。该数据可能不是来自官方发行版。"
+msgstr "检测到AviUtl ExEdit2版本为 %1$s，但签名验证失败。数据可能来自非官方版本。"
 
 msgctxt "external_api"
 msgid "external API already exists"
-msgstr "外部 API 已存在"
+msgstr "外部API已存在"
 
 msgctxt "external_api"
 msgid "external API initialized successfully"
-msgstr "外部 API 初始化成功。"
+msgstr "外部API初始化成功。"
 
 msgctxt "external_api"
 msgid "external API is disabled because the AviUtl ExEdit2 version is unknown"
-msgstr "因为 AviUtl ExEdit2 版本未知，外部 API 已禁用。"
+msgstr "由于AviUtl ExEdit2版本未知，外部API已被禁用"
 
 msgid "failed to clean up temporary file"
-msgstr "清理临时文件失败"
+msgstr "临时文件清理失败"
 
 msgctxt "cleanup_stale_temporary_directories"
 msgid "failed to cleanup stale temporary directories"
-msgstr "清理陈旧的临时目录失败"
+msgstr "过时的临时目录清理失败"
 
 msgid "failed to create thread"
-msgstr "创建线程失败"
+msgstr "线程创建失败"
 
 msgid "failed to create thread for delayed initialization"
 msgstr "为延迟初始化创建线程失败"
 
 msgid "failed to create unique temporary file"
-msgstr "创建唯一临时文件失败"
+msgstr "唯一临时文件创建失败"
 
 msgid "failed to drop from external API request"
-msgstr "从外部 API 请求放置失败"
+msgstr "来自外部API请求的拖放失败"
 
 msgid "failed to get external API setting"
-msgstr "获取外部 API 设置失败"
+msgstr "外部API设置获取失败"
 
 msgid "failed to initialize condition variable"
-msgstr "初始化条件变量失败"
+msgstr "条件变量初始化失败"
 
 msgid "failed to initialize external API"
-msgstr "外部 API 初始化失败"
+msgstr "外部API初始化失败"
 
 msgid "failed to initialize external API, continuing without it."
-msgstr "外部 API 初始化失败，将在不使用 API 的情况下继续。"
+msgstr "外部API初始化失败，将在不使用API的情况下继续。"
 
 msgid "failed to initialize mutex"
-msgstr "初始化互斥锁失败"
+msgstr "互斥锁初始化失败"
 
 msgid "failed to load language resources, continuing without them."
-msgstr "加载语言资源失败，将在没有语言资源的情况下继续。"
+msgstr "语言资源加载失败，将在没有语言资源的情况下继续。"
 
 msgid "failed to move cursor to target position"
-msgstr "将光标移动到目标位置失败"
+msgstr "无法将光标移动到目标位置"
 
 msgid "failed to paste from clipboard"
 msgstr "从剪贴板粘贴失败"
 
 msgid "failed to perform debug capture"
-msgstr "执行调试捕获失败"
+msgstr "调试捕获执行失败"
 
 msgid "failed to remove temporary directory"
-msgstr "删除临时目录失败"
+msgstr "临时目录删除失败"
 
 msgid "failed to set display zoom"
-msgstr "设置显示缩放失败"
+msgstr "显示缩放设置失败"
 
 msgid "failed to update external API project data"
-msgstr "更新外部 API 项目数据失败"
+msgstr "外部API项目数据更新失败"
 
 msgid "failed to update external API state"
-msgstr "更新外部 API 状态失败"
+msgstr "外部API状态更新失败"
 
 #, c-format
 msgid "invalid hex character at position %1$zu"
@@ -317,20 +317,20 @@ msgstr "签名中包含无效的十六进制字符"
 
 #, c-format
 msgid "invalid key length: expected %1$d hex characters, got %2$zu"
-msgstr "密钥长度无效: 应为 %1$d 个十六进制字符，实际为 %2$zu 个"
+msgstr "密钥长度无效: 期望 %1$d 个十六进制字符，实际为 %2$zu 个"
 
 msgid "invalid updated_at timestamp format"
 msgstr "updated_at 时间戳格式无效"
 
 #, c-format
 msgid "maximum number of menu items(%1$d) exceeded"
-msgstr "已超过菜单项的最大数量 (%1$d)"
+msgstr "超出菜单项的最大数量 (%1$d)"
 
 msgid "no signature found in INI file"
-msgstr "在 INI 文件中找不到签名"
+msgstr "在INI文件中找不到签名"
 
 msgid "no updated_at found in global section"
-msgstr "在全局节中找不到 updated_at"
+msgstr "在全局段中找不到 updated_at"
 
 #, c-format
 msgctxt "cleanup_stale_temporary_directories"
@@ -339,17 +339,17 @@ msgstr "已删除: %1$ls"
 
 #, c-format
 msgid "saved timeline screenshot to \"%ls\""
-msgstr "时间轴屏幕截图已保存到 \"%1$ls\"。"
+msgstr "时间轴截图已保存到 \"%1$ls\"。"
 
 msgctxt "cleanup_stale_temporary_directories"
 msgid "stale temporary directory cleanup complete"
-msgstr "陈旧的临时目录清理完成。"
+msgstr "过时的临时目录清理完成。"
 
 msgid "too many AviUtl2 manager windows found"
-msgstr "找到的 AviUtl2 管理器窗口过多。"
+msgstr "找到的AviUtl2管理器窗口过多。"
 
 msgid "unknown AviUtl ExEdit2 version detected. some features will be disabled."
-msgstr "检测到未知的 AviUtl ExEdit2 版本。某些功能将被禁用。"
+msgstr "检测到未知的AviUtl ExEdit2版本。某些功能将被禁用。"
 
 #, c-format
 msgid "unknown processing mode: %1$d"
@@ -360,7 +360,7 @@ msgid "†"
 msgstr "†"
 
 #~ msgid "This version of AviUtl ExEdit2 is not supported."
-#~ msgstr "不支持此版本的 AviUtl ExEdit2。"
+#~ msgstr "不支持此版本的AviUtl ExEdit2。"
 
 #~ msgid "gcmz_temp_create_unique_file failed"
 #~ msgstr "gcmz_temp_create_unique_file 失败"
