@@ -125,6 +125,11 @@ https://github.com/oov/aviutl2_gcmzdrops2/releases
 このような場合でも、次回 AviUtl ExEdit2 を起動した際に残っている一時ファイルがあれば、自動的に削除します。  
 継続的に必要になるファイルは一時フォルダーに置かないでください。
 
+Contributors
+------------
+
+- Nsyw - Simplified Chinese translation
+
 Credits
 -------
 
