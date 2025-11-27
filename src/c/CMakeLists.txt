@@ -104,6 +104,7 @@ add_library(gcmzdrops_intf INTERFACE)
 target_include_directories(gcmzdrops_intf INTERFACE
   "${CMAKE_CURRENT_BINARY_DIR}" # for version.h
   "${LUAJIT_INCLUDE}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/3rd/aviutl2_plugin_sdk_for_c/include"
 )
 set(GCMZ_SCRIPT_SUBDIR "GCMZScript")
 target_compile_definitions(gcmzdrops_intf INTERFACE

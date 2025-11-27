@@ -13,7 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "aviutl2_sdk_c/aviutl2_logger2.h"
+#include <aviutl2_logger2.h>
 
 enum log_level {
   log_level_verbose,

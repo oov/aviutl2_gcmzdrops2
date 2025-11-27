@@ -1,8 +1,5 @@
 #include "aviutl2.h"
 
-#include "aviutl2_sdk_c/aviutl2_logger2.h"
-#include "aviutl2_sdk_c/aviutl2_plugin2.h"
-
 #include <assert.h>
 #include <stdarg.h>
 #include <string.h>
@@ -16,6 +13,9 @@
 #include <ovl/crypto.h>
 #include <ovl/os.h>
 #include <ovl/path.h>
+
+#include <aviutl2_logger2.h>
+#include <aviutl2_plugin2.h>
 
 #include "do.h"
 #include "gcmz_types.h"

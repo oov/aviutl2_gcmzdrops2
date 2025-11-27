@@ -1,7 +1,8 @@
 #include "project_info.h"
 
+#include <aviutl2_plugin2.h>
+
 #include "aviutl2.h"
-#include "aviutl2_sdk_c/aviutl2_plugin2.h"
 #include "gcmz_types.h"
 
 static struct aviutl2_edit_handle *g_edit = NULL;

@@ -44,16 +44,16 @@
 #include <ovl/path.h>
 
 #if TARGET_AVIUTL2_FILTER_PLUGIN
-#  include "aviutl2_sdk_c/aviutl2_filter2.h"
+#  include <aviutl2_filter2.h>
 #endif
 #if TARGET_AVIUTL2_SCRIPT_MODULE
-#  include "aviutl2_sdk_c/aviutl2_module2.h"
+#  include <aviutl2_module2.h>
 #endif
 #if TARGET_AVIUTL2_PLUGIN
-#  include "aviutl2_sdk_c/aviutl2_plugin2.h"
+#  include <aviutl2_plugin2.h>
 #endif
 
-#include "aviutl2_sdk_c/aviutl2_logger2.h"
+#include <aviutl2_logger2.h>
 
 #include "analyze.h"
 #include "api.h"
