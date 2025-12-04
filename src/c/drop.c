@@ -1,5 +1,7 @@
 #include "drop.h"
 
+#include "gcmz_types.h"
+
 #include <ovarray.h>
 #include <ovmo.h>
 #include <ovprintf.h>
@@ -50,6 +52,7 @@ struct wrapped_drop_target {
   struct gcmz_file_list *current_file_list;    ///< Extracted and converted file list
   struct placeholder_entry *placeholder_cache; ///< Placeholder cache for lazy file creation
   wchar_t *shared_placeholder_path;            ///< Shared placeholder file path
+  bool current_from_external_api;              ///< Whether current drop originated from external API
   CRITICAL_SECTION cs;                         ///< Window-specific lock for drag state
 
   HHOOK subclass_hook; ///< Hook for cross-thread subclass installation (NULL if already subclassed)
@@ -266,15 +269,11 @@ cleanup:
  * Iterates through the file list and calls the cleanup callback for each
  * temporary file. Errors are reported but do not stop iteration.
  *
- * @param wdt Wrapped drop target containing parent context with cleanup callback
+ * @param d Drop context containing cleanup callback
  * @param file_list File list to process
  */
-static void cleanup_temporary_files_in_list(struct wrapped_drop_target *wdt, struct gcmz_file_list *file_list) {
-  if (!wdt || !file_list) {
-    return;
-  }
-  struct gcmz_drop *d = wdt->d;
-  if (!d || !d->cleanup_fn) {
+static void cleanup_temporary_files_in_list(struct gcmz_drop *d, struct gcmz_file_list *file_list) {
+  if (!d || !d->cleanup_fn || !file_list) {
     return;
   }
   struct ov_error err = {0};
@@ -291,102 +290,118 @@ static void cleanup_temporary_files_in_list(struct wrapped_drop_target *wdt, str
   }
 }
 
-// Context for write_dropfiles_paths function
-struct write_dropfiles_paths_context {
-  bool all_accessible; ///< Set during first pass, used to optimize second pass
-};
-
 /**
- * @brief Write file paths in DROPFILES format with placeholder substitution
+ * @brief Callback type for writing file paths to DROPFILES buffer
  *
- * This function operates in two passes:
- * - First pass (dest=NULL): Calculate buffer size and set wctx->all_accessible flag
- * - Second pass (dest!=NULL): Write actual data, using wctx->all_accessible for optimization
- *
- * When all files are accessible (common case), the second pass skips file accessibility
- * checks entirely, improving performance.
- *
- * @param wdt Wrapped drop target containing cache and configuration
- * @param file_list List of files to process
- * @param dest Destination buffer (NULL for first pass to calculate size only)
- * @param wctx Context structure shared between first and second pass
+ * @param dest Destination buffer (NULL for size calculation pass)
+ * @param userdata User-provided context (includes file list and other data)
  * @param err Error structure for reporting failures
  * @return Number of wchar_t written/required (including null terminators), or 0 on error
  */
-static size_t write_dropfiles_paths(struct wrapped_drop_target *wdt,
-                                    struct gcmz_file_list *file_list,
-                                    wchar_t *dest,
-                                    struct write_dropfiles_paths_context *wctx,
-                                    struct ov_error *const err) {
-  if (!wdt || !file_list || !wctx) {
+typedef size_t (*dropfiles_path_writer_fn)(wchar_t *dest, void *userdata, struct ov_error *err);
+
+/**
+ * @brief Create IDataObject with CF_HDROP format using custom path writer
+ *
+ * This is a common helper that handles DROPFILES structure creation, GlobalAlloc,
+ * and IDataObject setup. The actual path writing is delegated to the callback.
+ *
+ * @param x X coordinate to store in DROPFILES
+ * @param y Y coordinate to store in DROPFILES
+ * @param writer_fn Callback function to write paths
+ * @param writer_userdata Context passed to writer callback (includes file list)
+ * @param err Error structure for reporting failures
+ * @return IDataObject on success, NULL on failure
+ */
+static IDataObject *create_dropfiles_dataobj(
+    int x, int y, dropfiles_path_writer_fn writer_fn, void *writer_userdata, struct ov_error *const err) {
+  if (!writer_fn) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
-    return 0;
+    return NULL;
   }
 
-  bool const first_pass = !dest;
-  size_t total_len = 0;
-  wchar_t *current = dest;
-  size_t result = 0;
-
-  if (first_pass) {
-    wctx->all_accessible = true;
-  }
+  HGLOBAL h = NULL;
+  DROPFILES *drop_files = NULL;
+  IDataObject *pDataObj = NULL;
+  IDataObject *result = NULL;
 
   {
-    size_t const file_count = gcmz_file_list_count(file_list);
-    for (size_t i = 0; i < file_count; i++) {
-      struct gcmz_file const *file = gcmz_file_list_get(file_list, i);
-      if (!file || !file->path) {
-        continue;
-      }
+    // First pass: calculate required buffer size
+    size_t const path_buffer_len = writer_fn(NULL, writer_userdata, err);
+    if (path_buffer_len == 0) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+    size_t const total_size = sizeof(DROPFILES) + path_buffer_len * sizeof(wchar_t);
 
-      wchar_t const *path_to_use = NULL;
+    h = GlobalAlloc(GMEM_MOVEABLE, total_size);
+    if (!h) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
+    drop_files = (DROPFILES *)GlobalLock(h);
+    if (!drop_files) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
+    *drop_files = (DROPFILES){
+        .pFiles = sizeof(DROPFILES),
+        .pt = {x, y},
+        .fNC = FALSE,
+        .fWide = TRUE,
+    };
 
-      if (!first_pass && wctx->all_accessible) {
-        path_to_use = file->path;
-      } else {
-        switch (is_file_accessible(wdt, file->path, err)) {
-        case ov_indeterminate:
-          OV_ERROR_ADD_TRACE(err);
-          goto cleanup;
-
-        case ov_true:
-          path_to_use = file->path;
-          break;
-
-        case ov_false:
-          if (first_pass) {
-            wctx->all_accessible = false;
-          }
-          if (!wdt->shared_placeholder_path) {
-            if (!gcmz_temp_create_unique_file(L"placeholder.txt", &wdt->shared_placeholder_path, err)) {
-              OV_ERROR_ADD_TRACE(err);
-              goto cleanup;
-            }
-          }
-          path_to_use = wdt->shared_placeholder_path;
-          break;
-        }
-      }
-
-      size_t const len = wcslen(path_to_use);
-      total_len += len + 1; // +1 for null terminator
-
-      if (current) {
-        wcscpy(current, path_to_use);
-        current += len + 1;
-      }
+    // Second pass: write actual paths
+    wchar_t *path_buffer = (wchar_t *)(void *)(drop_files + 1);
+    size_t const written = writer_fn(path_buffer, writer_userdata, err);
+    if (written == 0) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
     }
 
-    total_len += 1; // +1 for null terminator
-    if (current) {
-      *current = L'\0';
+    GlobalUnlock(h);
+    drop_files = NULL;
+
+    HRESULT hr = SHCreateDataObject(NULL, 0, NULL, NULL, &IID_IDataObject, (void **)&pDataObj);
+    if (FAILED(hr)) {
+      OV_ERROR_SET_HRESULT(err, hr);
+      goto cleanup;
     }
+
+    hr = IDataObject_SetData(pDataObj,
+                             (&(FORMATETC){
+                                 .cfFormat = CF_HDROP,
+                                 .dwAspect = DVASPECT_CONTENT,
+                                 .lindex = -1,
+                                 .tymed = TYMED_HGLOBAL,
+                             }),
+                             (&(STGMEDIUM){
+                                 .tymed = TYMED_HGLOBAL,
+                                 .hGlobal = h,
+                             }),
+                             TRUE);
+    if (FAILED(hr)) {
+      OV_ERROR_SET_HRESULT(err, hr);
+      goto cleanup;
+    }
+    h = NULL; // Ownership transferred
+
+    result = pDataObj;
+    pDataObj = NULL;
   }
 
-  result = total_len;
-
 cleanup:
+  if (drop_files) {
+    GlobalUnlock(h);
+    drop_files = NULL;
+  }
+  if (h) {
+    GlobalFree(h);
+    h = NULL;
+  }
+  if (pDataObj) {
+    IDataObject_Release(pDataObj);
+  }
   return result;
 }
 
@@ -445,166 +460,134 @@ cleanup:
   return file_list;
 }
 
-static IDataObject *create_dataobj_from_file_list(struct wrapped_drop_target *const wdt,
-                                                  struct gcmz_file_list *file_list,
-                                                  struct ov_error *const err) {
+struct placeholder_writer_context {
+  struct wrapped_drop_target *wdt;
+  struct gcmz_file_list *file_list;
+  bool all_accessible; ///< Set during first pass, used to optimize second pass
+};
+
+/**
+ * @brief Path writer with placeholder substitution for inaccessible files
+ *
+ * This function operates in two passes:
+ * - First pass (dest=NULL): Calculate buffer size and set ctx->all_accessible flag
+ * - Second pass (dest!=NULL): Write actual data, using ctx->all_accessible for optimization
+ *
+ * When all files are accessible (common case), the second pass skips file accessibility
+ * checks entirely, improving performance.
+ */
+static size_t placeholder_path_writer(wchar_t *dest, void *userdata, struct ov_error *err) {
+  struct placeholder_writer_context *ctx = (struct placeholder_writer_context *)userdata;
+  if (!ctx || !ctx->wdt || !ctx->file_list) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return 0;
+  }
+
+  struct wrapped_drop_target *wdt = ctx->wdt;
+  struct gcmz_file_list *file_list = ctx->file_list;
+  bool const first_pass = !dest;
+  size_t total_len = 0;
+  wchar_t *current = dest;
+  size_t result = 0;
+
+  if (first_pass) {
+    ctx->all_accessible = true;
+  }
+
+  {
+    size_t const file_count = gcmz_file_list_count(file_list);
+    for (size_t i = 0; i < file_count; i++) {
+      struct gcmz_file const *file = gcmz_file_list_get(file_list, i);
+      if (!file || !file->path) {
+        continue;
+      }
+
+      wchar_t const *path_to_use = NULL;
+
+      if (!first_pass && ctx->all_accessible) {
+        path_to_use = file->path;
+      } else {
+        switch (is_file_accessible(wdt, file->path, err)) {
+        case ov_indeterminate:
+          OV_ERROR_ADD_TRACE(err);
+          goto cleanup;
+
+        case ov_true:
+          path_to_use = file->path;
+          break;
+
+        case ov_false:
+          if (first_pass) {
+            ctx->all_accessible = false;
+          }
+          if (!wdt->shared_placeholder_path) {
+            if (!gcmz_temp_create_unique_file(L"placeholder.txt", &wdt->shared_placeholder_path, err)) {
+              OV_ERROR_ADD_TRACE(err);
+              goto cleanup;
+            }
+          }
+          path_to_use = wdt->shared_placeholder_path;
+          break;
+        }
+      }
+
+      size_t const len = wcslen(path_to_use);
+      total_len += len + 1; // +1 for null terminator
+
+      if (current) {
+        wcscpy(current, path_to_use);
+        current += len + 1;
+      }
+    }
+
+    total_len += 1; // +1 for null terminator
+    if (current) {
+      *current = L'\0';
+    }
+  }
+
+  result = total_len;
+
+cleanup:
+  return result;
+}
+
+static IDataObject *create_dataobj_with_placeholders(
+    struct wrapped_drop_target *const wdt, struct gcmz_file_list *file_list, int x, int y, struct ov_error *const err) {
   if (!wdt || !file_list) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return NULL;
   }
-
-  HGLOBAL h = NULL;
-  DROPFILES *drop_files = NULL;
-  IDataObject *pDataObj = NULL;
-  IDataObject *result = NULL;
-
-  {
-    // calculate required buffer size for DROPFILES paths
-    struct write_dropfiles_paths_context wctx = {0};
-    size_t const path_buffer_len = write_dropfiles_paths(wdt, file_list, NULL, &wctx, err);
-    if (path_buffer_len == 0) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
-    size_t const total_size = sizeof(DROPFILES) + path_buffer_len * sizeof(wchar_t);
-
-    h = GlobalAlloc(GMEM_MOVEABLE, total_size);
-    if (!h) {
-      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-      goto cleanup;
-    }
-    drop_files = (DROPFILES *)GlobalLock(h);
-    if (!drop_files) {
-      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-      goto cleanup;
-    }
-    *drop_files = (DROPFILES){
-        .pFiles = sizeof(DROPFILES),
-        .fWide = TRUE,
-    };
-
-    wchar_t *path_buffer = (wchar_t *)(void *)(drop_files + 1);
-    size_t const written = write_dropfiles_paths(wdt, file_list, path_buffer, &wctx, err);
-    if (written == 0) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
-
-    HRESULT hr = SHCreateDataObject(NULL, 0, NULL, NULL, &IID_IDataObject, (void **)&pDataObj);
-    if (FAILED(hr)) {
-      OV_ERROR_SET_HRESULT(err, hr);
-      goto cleanup;
-    }
-
-    GlobalUnlock(h);
-    drop_files = NULL;
-    hr = IDataObject_SetData(pDataObj,
-                             (&(FORMATETC){
-                                 .cfFormat = CF_HDROP,
-                                 .dwAspect = DVASPECT_CONTENT,
-                                 .lindex = -1,
-                                 .tymed = TYMED_HGLOBAL,
-                             }),
-                             (&(STGMEDIUM){
-                                 .tymed = TYMED_HGLOBAL,
-                                 .hGlobal = h,
-                             }),
-                             TRUE);
-    if (FAILED(hr)) {
-      OV_ERROR_SET_HRESULT(err, hr);
-      goto cleanup;
-    }
-    h = NULL;
-
-    result = pDataObj;
-    pDataObj = NULL;
-  }
-
-cleanup:
-  if (drop_files) {
-    GlobalUnlock(h);
-    drop_files = NULL;
-  }
-  if (h) {
-    GlobalFree(h);
-    h = NULL;
-  }
-  if (pDataObj) {
-    IDataObject_Release(pDataObj);
+  IDataObject *result = create_dropfiles_dataobj(x,
+                                                 y,
+                                                 placeholder_path_writer,
+                                                 &(struct placeholder_writer_context){
+                                                     .wdt = wdt,
+                                                     .file_list = file_list,
+                                                     .all_accessible = false,
+                                                 },
+                                                 err);
+  if (!result) {
+    OV_ERROR_ADD_TRACE(err);
+    return NULL;
   }
   return result;
 }
 
-static void call_lua_drag_enter_hook(
-    struct gcmz_drop *const d, struct gcmz_file_list *file_list, int x, int y, uint32_t key_state) {
-  if (!d || !d->lua_context || !file_list) {
-    return;
+/**
+ * @brief Capture current modifier key states
+ *
+ * @return Modifier key flags (gcmz_modifier_key_flags)
+ */
+static inline uint32_t capture_modifier_keys(void) {
+  uint32_t modifier_keys = 0;
+  if (GetAsyncKeyState(VK_MENU) & 0x8000) {
+    modifier_keys |= gcmz_modifier_alt;
   }
-
-  struct ov_error err = {0};
-  bool ok = gcmz_lua_call_drag_enter(d->lua_context, file_list, x, y, key_state, &err);
-  if (!ok) {
-#if GCMZ_DEBUG
-    OutputDebugStringW(L"call_lua_drag_enter_hook: Lua drag_enter hook failed\n");
-#endif
-    OV_ERROR_REPORT(&err, NULL);
-    return;
+  if ((GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
+    modifier_keys |= gcmz_modifier_win;
   }
-
-#if GCMZ_DEBUG
-  OutputDebugStringW(L"call_lua_drag_enter_hook: Lua drag_enter hook called successfully\n");
-#endif
-}
-
-static void call_lua_drag_over_hook(struct gcmz_drop *const d, int x, int y, uint32_t key_state) {
-  if (!d || !d->lua_context) {
-    return;
-  }
-
-  struct ov_error err = {0};
-  bool ok = gcmz_lua_call_drag_over(d->lua_context, x, y, key_state, &err);
-  if (!ok) {
-#if GCMZ_DEBUG
-    OutputDebugStringW(L"call_lua_drag_over_hook: Lua drag_over hook failed\n");
-#endif
-    OV_ERROR_REPORT(&err, NULL);
-  }
-}
-
-static void call_lua_drag_leave_hook(struct gcmz_drop *const d) {
-  if (!d || !d->lua_context) {
-    return;
-  }
-
-  struct ov_error err = {0};
-  bool ok = gcmz_lua_call_drag_leave(d->lua_context, &err);
-  if (!ok) {
-#if GCMZ_DEBUG
-    OutputDebugStringW(L"call_lua_drag_leave_hook: Lua drag_leave hook failed\n");
-#endif
-    OV_ERROR_REPORT(&err, NULL);
-  }
-}
-
-static void
-call_lua_drop_hook(struct gcmz_drop *const d, struct gcmz_file_list *file_list, int x, int y, uint32_t key_state) {
-  if (!d || !d->lua_context || !file_list) {
-    return;
-  }
-
-  struct ov_error err = {0};
-  bool ok = gcmz_lua_call_drop(d->lua_context, file_list, x, y, key_state, &err);
-  if (!ok) {
-#if GCMZ_DEBUG
-    OutputDebugStringW(L"call_lua_drop_hook: Lua drop hook failed\n");
-#endif
-    OV_ERROR_REPORT(&err, NULL);
-    return;
-  }
-
-#if GCMZ_DEBUG
-  OutputDebugStringW(L"call_lua_drop_hook: Lua drop hook called successfully\n");
-#endif
+  return modifier_keys;
 }
 
 static void cleanup_current_entry(struct wrapped_drop_target *const wdt) {
@@ -631,7 +614,7 @@ static void cleanup_current_entry(struct wrapped_drop_target *const wdt) {
     OV_ARRAY_DESTROY(&wdt->placeholder_cache);
   }
 
-  cleanup_temporary_files_in_list(wdt, wdt->current_file_list);
+  cleanup_temporary_files_in_list(wdt->d, wdt->current_file_list);
   gcmz_file_list_destroy(&wdt->current_file_list);
 
   if (wdt->current_original) {
@@ -642,6 +625,7 @@ static void cleanup_current_entry(struct wrapped_drop_target *const wdt) {
     IDataObject_Release(wdt->current_replacement);
     wdt->current_replacement = NULL;
   }
+  wdt->current_from_external_api = false;
 }
 
 // Forward declaration for subclass proc
@@ -804,13 +788,23 @@ static IDataObject *prepare_drag_enter_dataobj(struct wrapped_drop_target *const
   cleanup_current_entry(wdt);
 
   {
+    bool const from_external_api = gcmz_dataobj_is_from_external_api(original_dataobj);
+    wdt->current_from_external_api = from_external_api;
+
     file_list = extract_and_convert_files(wdt, original_dataobj, err);
     if (!file_list) {
       OV_ERROR_ADD_TRACE(err);
       goto cleanup;
     }
-    call_lua_drag_enter_hook(d, file_list, pt.x, pt.y, grfKeyState);
-    replacement_dataobj = create_dataobj_from_file_list(wdt, file_list, err);
+    {
+      struct ov_error lua_err = {0};
+      if (!gcmz_lua_call_drag_enter(
+              d->lua_context, file_list, grfKeyState, capture_modifier_keys(), from_external_api, &lua_err)) {
+        gcmz_logf_warn(&lua_err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drag_enter");
+        OV_ERROR_DESTROY(&lua_err);
+      }
+    }
+    replacement_dataobj = create_dataobj_with_placeholders(wdt, file_list, pt.x, pt.y, err);
     if (!replacement_dataobj) {
       OV_ERROR_ADD_TRACE(err);
       goto cleanup;
@@ -911,95 +905,18 @@ cleanup:
   return hr;
 }
 
-static IDataObject *prepare_drag_over_dataobj(struct wrapped_drop_target *const wdt,
-                                              POINTL pt,
-                                              DWORD grfKeyState,
-                                              struct ov_error *const err) {
-  if (!wdt) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
-    return NULL;
-  }
-
-  struct gcmz_drop *const d = wdt->d;
-  IDataObject *result = NULL;
-
-  call_lua_drag_over_hook(d, pt.x, pt.y, grfKeyState);
-  EnterCriticalSection(&wdt->cs);
-  // DragOver doesn't provide the IDataObject directly,
-  // but we can check if we have a current replacement from DragEnter
-  if (wdt->current_original && wdt->current_replacement) {
-    result = wdt->current_replacement;
-    IDataObject_AddRef(result);
-#if GCMZ_DEBUG
-    OutputDebugStringW(L"prepare_drag_over_dataobj: Using replacement data object\n");
-#endif
-  }
-  LeaveCriticalSection(&wdt->cs);
-  return result;
-}
-
 static HRESULT STDMETHODCALLTYPE wrapped_drop_target_drag_over(IDropTarget *This,
                                                                DWORD grfKeyState,
                                                                POINTL pt,
                                                                DWORD *pdwEffect) {
-#if GCMZ_DEBUG
-  wchar_t debug_msg[256];
-  ov_snprintf_wchar(debug_msg,
-                    256,
-                    NULL,
-                    L"wrapped_drop_target_drag_over: pt=(%d,%d), grfKeyState=0x%08x, *pdwEffect=0x%08x\n",
-                    pt.x,
-                    pt.y,
-                    grfKeyState,
-                    pdwEffect ? *pdwEffect : 0);
-  OutputDebugStringW(debug_msg);
-#endif
-
   if (!This) {
     return E_INVALIDARG;
   }
-
   struct wrapped_drop_target *const impl = get_impl_from_drop_target(This);
-
-  if (!impl || !impl->main_window) {
-    if (impl && impl->original) {
-      HRESULT hr = IDropTarget_DragOver(impl->original, grfKeyState, pt, pdwEffect);
-#if GCMZ_DEBUG
-      ov_snprintf_wchar(debug_msg,
-                        256,
-                        NULL,
-                        L"wrapped_drop_target_drag_over: original call returned hr=0x%08x, *pdwEffect=0x%08x\n",
-                        hr,
-                        pdwEffect ? *pdwEffect : 0);
-      OutputDebugStringW(debug_msg);
-#endif
-      return hr;
-    }
+  if (!impl || !impl->original) {
     return E_FAIL;
   }
-
-  IDataObject *replacement_dataobj = NULL;
-  HRESULT hr = E_FAIL;
-  struct ov_error err = {0};
-
-  // Try to prepare hook processing and get replacement data object
-  // Note: replacement_dataobj can be NULL if no replacement is available (not an error)
-  replacement_dataobj = prepare_drag_over_dataobj(impl, pt, grfKeyState, &err);
-  hr = IDropTarget_DragOver(impl->original, grfKeyState, pt, pdwEffect);
-  if (replacement_dataobj) {
-    IDataObject_Release(replacement_dataobj);
-  }
-
-#if GCMZ_DEBUG
-  ov_snprintf_wchar(debug_msg,
-                    256,
-                    NULL,
-                    L"wrapped_drop_target_drag_over: hooked call returned hr=0x%08x, *pdwEffect=0x%08x\n",
-                    hr,
-                    pdwEffect ? *pdwEffect : 0);
-  OutputDebugStringW(debug_msg);
-#endif
-  return hr;
+  return IDropTarget_DragOver(impl->original, grfKeyState, pt, pdwEffect);
 }
 
 static bool prepare_drag_leave(struct wrapped_drop_target *const wdt, struct ov_error *const err) {
@@ -1008,7 +925,13 @@ static bool prepare_drag_leave(struct wrapped_drop_target *const wdt, struct ov_
     return false;
   }
   struct gcmz_drop *const d = wdt->d;
-  call_lua_drag_leave_hook(d);
+  {
+    struct ov_error lua_err = {0};
+    if (!gcmz_lua_call_drag_leave(d->lua_context, &lua_err)) {
+      gcmz_logf_warn(&lua_err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drag_leave");
+      OV_ERROR_DESTROY(&lua_err);
+    }
+  }
   EnterCriticalSection(&wdt->cs);
   cleanup_current_entry(wdt);
   LeaveCriticalSection(&wdt->cs);
@@ -1075,6 +998,9 @@ static IDataObject *prepare_drop_dataobj(struct wrapped_drop_target *const wdt,
   wchar_t *managed_path = NULL;
   IDataObject *result = NULL;
 
+  // Get from_external_api flag before cleanup_current_entry resets it
+  bool const from_external_api = gcmz_dataobj_is_from_external_api(original_dataobj);
+
   EnterCriticalSection(&wdt->cs);
   cleanup_current_entry(wdt);
 
@@ -1084,7 +1010,14 @@ static IDataObject *prepare_drop_dataobj(struct wrapped_drop_target *const wdt,
       OV_ERROR_ADD_TRACE(err);
       goto cleanup;
     }
-    call_lua_drop_hook(d, file_list, pt.x, pt.y, grfKeyState);
+    {
+      struct ov_error lua_err = {0};
+      if (!gcmz_lua_call_drop(
+              d->lua_context, file_list, grfKeyState, capture_modifier_keys(), from_external_api, &lua_err)) {
+        gcmz_logf_warn(&lua_err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drop");
+        OV_ERROR_DESTROY(&lua_err);
+      }
+    }
     if (d->file_manage_fn) {
       size_t const file_count = gcmz_file_list_count(file_list);
       for (size_t i = 0; i < file_count; i++) {
@@ -1119,7 +1052,7 @@ static IDataObject *prepare_drop_dataobj(struct wrapped_drop_target *const wdt,
       }
     }
 
-    replacement_dataobj = create_dataobj_from_file_list(wdt, file_list, err);
+    replacement_dataobj = create_dataobj_with_placeholders(wdt, file_list, pt.x, pt.y, err);
     if (!replacement_dataobj) {
       OV_ERROR_ADD_TRACE(err);
       goto cleanup;
@@ -1226,6 +1159,7 @@ wrapped_drop_target_drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyS
   ov_snprintf_wchar(debug_msg, 256, NULL, L"wrapped_drop_target_drop: DragLeave returned hr=0x%08x\n", hr);
   OutputDebugStringW(debug_msg);
 #endif
+
   hr = IDropTarget_DragEnter(impl->original, replacement_dataobj, grfKeyState, pt, pdwEffect);
 #if GCMZ_DEBUG
   ov_snprintf_wchar(debug_msg,
@@ -1236,6 +1170,10 @@ wrapped_drop_target_drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyS
                     pdwEffect ? *pdwEffect : 0);
   OutputDebugStringW(debug_msg);
 #endif
+  if (FAILED(hr)) {
+    goto cleanup;
+  }
+
   hr = IDropTarget_DragOver(impl->original, grfKeyState, pt, pdwEffect);
 #if GCMZ_DEBUG
   ov_snprintf_wchar(debug_msg,
@@ -1246,9 +1184,24 @@ wrapped_drop_target_drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyS
                     pdwEffect ? *pdwEffect : 0);
   OutputDebugStringW(debug_msg);
 #endif
+  if (FAILED(hr)) {
+    IDropTarget_DragLeave(impl->original);
+    goto cleanup;
+  }
+
+  if (pdwEffect && *pdwEffect == DROPEFFECT_NONE) {
+#if GCMZ_DEBUG
+    OutputDebugStringW(L"wrapped_drop_target_drop: Drop not allowed (DROPEFFECT_NONE), cancelling\n");
+#endif
+    IDropTarget_DragLeave(impl->original);
+    hr = S_OK;
+    goto cleanup;
+  }
+
   data_to_use = replacement_dataobj;
-cleanup:
   hr = IDropTarget_Drop(impl->original, data_to_use, grfKeyState, pt, pdwEffect);
+
+cleanup:
 
   if (replacement_dataobj) {
     IDataObject_Release(replacement_dataobj);
@@ -1262,7 +1215,7 @@ struct gcmz_drop *gcmz_drop_create(gcmz_drop_dataobj_extract_fn const extract_fn
                                    void *const callback_userdata,
                                    struct gcmz_lua_context *const lua_context,
                                    struct ov_error *const err) {
-  if (!err || !extract_fn || !cleanup_fn) {
+  if (!err || !extract_fn || !cleanup_fn || !lua_context) {
     if (err) {
       OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     }
@@ -1435,111 +1388,84 @@ cleanup:
   return success;
 }
 
-static IDataObject *create_simulation_dataobj(struct gcmz_file_list const *const file_list,
-                                              int const x,
-                                              int const y,
-                                              struct ov_error *const err) {
+// Context for simple path writer
+struct simple_writer_context {
+  struct gcmz_file_list const *file_list;
+};
+
+/**
+ * @brief Simple path writer that writes paths directly without placeholder substitution
+ */
+static size_t simple_path_writer(wchar_t *dest, void *userdata, struct ov_error *err) {
+  struct simple_writer_context const *ctx = (struct simple_writer_context const *)userdata;
+  if (!ctx || !ctx->file_list) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return 0;
+  }
+
+  struct gcmz_file_list const *file_list = ctx->file_list;
+  size_t total_len = 0;
+  wchar_t *current = dest;
+
+  size_t const file_count = gcmz_file_list_count(file_list);
+  for (size_t i = 0; i < file_count; i++) {
+    struct gcmz_file const *file = gcmz_file_list_get(file_list, i);
+    if (!file || !file->path) {
+      continue;
+    }
+
+    size_t const len = wcslen(file->path);
+    total_len += len + 1; // +1 for null terminator
+
+    if (current) {
+      wcscpy(current, file->path);
+      current += len + 1;
+    }
+  }
+
+  total_len += 1; // Final null terminator
+  if (current) {
+    *current = L'\0';
+  }
+
+  return total_len;
+}
+
+void *gcmz_drop_create_file_list_dataobj(struct gcmz_file_list const *const file_list,
+                                         int const x,
+                                         int const y,
+                                         struct ov_error *const err) {
   if (!file_list) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return NULL;
   }
-
   size_t const file_count = gcmz_file_list_count(file_list);
-  HGLOBAL hGlobal = NULL;
-  DROPFILES *pDropFiles = NULL;
-  IDataObject *pDataObject = NULL;
-  wchar_t *pFiles = NULL;
-  bool success = false;
-  HRESULT hr = E_FAIL;
-
-  // Calculate total size needed for DROPFILES structure
-  size_t total_size = sizeof(DROPFILES);
-  for (size_t i = 0; i < file_count; i++) {
-    struct gcmz_file const *file = gcmz_file_list_get(file_list, i);
-    if (file && file->path) {
-      total_size += (wcslen(file->path) + 1) * sizeof(wchar_t);
-    }
+  if (file_count == 0) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return NULL;
   }
-  total_size += sizeof(wchar_t); // Final null terminator
-
-  hGlobal = GlobalAlloc(GMEM_MOVEABLE, total_size);
-  if (!hGlobal) {
-    OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-    goto cleanup;
-  }
-  pDropFiles = (DROPFILES *)GlobalLock(hGlobal);
-  if (!pDropFiles) {
-    OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-    goto cleanup;
-  }
-  *pDropFiles = (DROPFILES){
-      .pFiles = sizeof(DROPFILES),
-      .pt = (POINT){x, y},
-      .fNC = FALSE,
-      .fWide = TRUE,
-  };
-
-  pFiles = (wchar_t *)(void *)(pDropFiles + 1);
-  for (size_t i = 0; i < file_count; i++) {
-    struct gcmz_file const *file = gcmz_file_list_get(file_list, i);
-    if (file && file->path) {
-      wcscpy(pFiles, file->path);
-      pFiles += wcslen(file->path) + 1;
-    }
-  }
-  *pFiles = L'\0';
-
-  GlobalUnlock(hGlobal);
-  pDropFiles = NULL;
-
-  hr = SHCreateDataObject(NULL, 0, NULL, NULL, &IID_IDataObject, (void **)&pDataObject);
-  if (FAILED(hr)) {
-    OV_ERROR_SET_HRESULT(err, hr);
-    goto cleanup;
-  }
-
-  hr = IDataObject_SetData(pDataObject,
-                           (&(FORMATETC){
-                               .cfFormat = CF_HDROP,
-                               .dwAspect = DVASPECT_CONTENT,
-                               .lindex = -1,
-                               .tymed = TYMED_HGLOBAL,
-                           }),
-                           (&(STGMEDIUM){
-                               .tymed = TYMED_HGLOBAL,
-                               .hGlobal = hGlobal,
-                               .pUnkForRelease = NULL,
-                           }),
-                           TRUE);
-  if (FAILED(hr)) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
-    goto cleanup;
-  }
-  hGlobal = NULL; // Ownership transferred
-
-  success = true;
-
-cleanup:
-  if (pDropFiles) {
-    GlobalUnlock(hGlobal);
-  }
-  if (hGlobal) {
-    GlobalFree(hGlobal);
-  }
-  if (!success && pDataObject) {
-    IDataObject_Release(pDataObject);
-    pDataObject = NULL;
+  IDataObject *pDataObject = create_dropfiles_dataobj(x,
+                                                      y,
+                                                      simple_path_writer,
+                                                      &(struct simple_writer_context){
+                                                          .file_list = file_list,
+                                                      },
+                                                      err);
+  if (!pDataObject) {
+    OV_ERROR_ADD_TRACE(err);
+    return NULL;
   }
   return pDataObject;
 }
 
-bool gcmz_drop_inject_dataobject(struct gcmz_drop *const d,
-                                 void *const window,
-                                 void *const dataobj,
-                                 int const x,
-                                 int const y,
-                                 bool const use_exo_converter,
-                                 struct ov_error *const err) {
+bool gcmz_drop_simulate_drop(struct gcmz_drop *const d,
+                             void *const window,
+                             void *const dataobj,
+                             int const x,
+                             int const y,
+                             bool const use_exo_converter,
+                             bool const from_external_api,
+                             struct ov_error *const err) {
   if (!d || !dataobj || !window) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
@@ -1560,6 +1486,7 @@ bool gcmz_drop_inject_dataobject(struct gcmz_drop *const d,
     OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "window is not registered");
     return false;
   }
+
   IDropTarget *drop_target = &wdt->drop_target;
   void *main_window = wdt->main_window;
   LeaveCriticalSection(&d->targets_cs);
@@ -1567,80 +1494,341 @@ bool gcmz_drop_inject_dataobject(struct gcmz_drop *const d,
   bool result = false;
   IDataObject *pDataObject = (IDataObject *)dataobj;
   IDataObject *wrapped = NULL;
+  IDataObject *replacement_dataobj = NULL;
   DWORD dwEffect = DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK;
   POINT pt0 = {0};
   POINTL ptl = {0};
   HRESULT hr = E_FAIL;
 
-  // Wrap
-  wrapped = (IDataObject *)gcmz_dataobj_create(pDataObject, use_exo_converter, err);
-  if (!wrapped) {
-    OV_ERROR_ADD_TRACE(err);
-    goto cleanup;
-  }
+  {
+    wrapped = (IDataObject *)gcmz_dataobj_create(pDataObject, use_exo_converter, from_external_api, err);
+    if (!wrapped) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
 
-  ClientToScreen((HWND)main_window, &pt0);
-  ptl.x = x + pt0.x;
-  ptl.y = y + pt0.y;
-  hr = IDropTarget_DragEnter(drop_target, wrapped, MK_LBUTTON, ptl, &dwEffect);
-  if (hr == S_OK) {
+    ClientToScreen((HWND)main_window, &pt0);
+    ptl.x = x + pt0.x;
+    ptl.y = y + pt0.y;
+    hr = IDropTarget_DragEnter(drop_target, wrapped, MK_LBUTTON, ptl, &dwEffect);
+    if (hr != S_OK) {
+      if (FAILED(hr)) {
+        OV_ERROR_SET_HRESULT(err, hr);
+      }
+      goto cleanup;
+    }
+
     dwEffect = DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK;
     hr = IDropTarget_DragOver(drop_target, MK_LBUTTON, ptl, &dwEffect);
-    if (hr == S_OK && dwEffect != DROPEFFECT_NONE) {
-      hr = IDropTarget_Drop(drop_target, wrapped, 0, ptl, &dwEffect);
-    } else {
-      hr = IDropTarget_DragLeave(drop_target);
+    if (hr != S_OK || dwEffect == DROPEFFECT_NONE) {
+      // Drop not allowed at this position
+      IDropTarget_DragLeave(drop_target);
+      if (FAILED(hr)) {
+        OV_ERROR_SET_HRESULT(err, hr);
+      }
+      goto cleanup;
     }
-  }
-  if (FAILED(hr)) {
-    OV_ERROR_SET_HRESULT(err, hr);
-    goto cleanup;
+
+    // Process files through Lua hooks and file management
+    replacement_dataobj = prepare_drop_dataobj(wdt, wrapped, ptl, 0, err);
+    if (!replacement_dataobj) {
+      IDropTarget_DragLeave(wdt->original);
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+
+    // Execute drop synchronously
+    hr = IDropTarget_Drop(wdt->original, replacement_dataobj, 0, ptl, &dwEffect);
+    if (FAILED(hr)) {
+      OV_ERROR_SET_HRESULT(err, hr);
+      goto cleanup;
+    }
   }
   result = true;
 
 cleanup:
+  if (replacement_dataobj) {
+    IDataObject_Release(replacement_dataobj);
+  }
   if (wrapped) {
     IDataObject_Release(wrapped);
   }
   return result;
 }
 
-bool gcmz_drop_simulate_drop(struct gcmz_drop *const d,
-                             void *const window,
-                             struct gcmz_file_list const *const file_list,
-                             int const x,
-                             int const y,
-                             bool const use_exo_converter,
-                             struct ov_error *const err) {
-  if (!d || !file_list || !window) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
-    return false;
+/**
+ * @brief Internal context for external drop completion
+ *
+ * Similar to complete_context_internal but for external API drops.
+ * Manages file list and drop target state for deferred completion.
+ */
+struct complete_context_external {
+  struct gcmz_drop_complete_context pub; ///< Public context (must be first for casting)
+  struct gcmz_drop *d;                   ///< Drop context for looking up target
+  struct gcmz_file_list *file_list;      ///< Processed file list (owned)
+  IDataObject *dataobj;                  ///< Data object for drop
+};
+
+/**
+ * @brief Complete the external drop operation
+ *
+ * This function performs either IDropTarget DragEnter→DragOver→Drop sequence or
+ * just releases resources based on execute_drop, then releases all resources and
+ * frees the context.
+ *
+ * @param ctx Complete context (will be freed after this call)
+ * @param execute_drop true to execute DragEnter→DragOver→Drop sequence, false to skip drop
+ */
+static void complete_external_drop_impl(struct gcmz_drop_complete_context *ctx, bool execute_drop) {
+  if (!ctx) {
+    return;
   }
-  size_t const file_count = gcmz_file_list_count(file_list);
-  if (file_count == 0) {
+
+  struct complete_context_external *ectx = (struct complete_context_external *)ctx;
+  struct gcmz_drop *d = ectx->d;
+  struct wrapped_drop_target *wdt = NULL;
+
+  POINT pt0 = {0};
+  ClientToScreen((HWND)ctx->window, &pt0);
+  POINTL ptl = {.x = ctx->x + pt0.x, .y = ctx->y + pt0.y};
+  DWORD effect = ctx->drop_effect;
+  HRESULT hr = E_FAIL;
+  struct ov_error err = {0};
+  bool success = false;
+
+  if (!d || !ectx->dataobj) {
+    OV_ERROR_SET_GENERIC(&err, ov_error_generic_invalid_argument);
+    goto cleanup;
+  }
+
+  {
+    // Find the drop target
+    EnterCriticalSection(&d->targets_cs);
+    size_t const len = OV_ARRAY_LENGTH(d->wrapped_targets);
+    for (size_t i = 0; i < len; ++i) {
+      if (d->wrapped_targets[i] && d->wrapped_targets[i]->main_window == ctx->window) {
+        wdt = d->wrapped_targets[i];
+        break;
+      }
+    }
+    LeaveCriticalSection(&d->targets_cs);
+  }
+
+  if (!wdt) {
+    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "window is not registered");
+    goto cleanup;
+  }
+  if (!execute_drop) {
+    goto cleanup;
+  }
+
+  hr = IDropTarget_DragEnter(wdt->original, ectx->dataobj, ctx->key_state, ptl, &effect);
+  if (FAILED(hr)) {
+    OV_ERROR_SET(&err, ov_error_type_hresult, hr, "IDropTarget_DragEnter failed");
+    goto cleanup;
+  }
+  if (effect == DROPEFFECT_NONE) {
+    gcmz_logf_warn(NULL,
+                   NULL,
+                   "DragEnter rejected drop: window=0x%1$08lX effect=0x%2$08lX",
+                   (unsigned long)(uintptr_t)wdt->main_window,
+                   (unsigned long)effect);
+    IDropTarget_DragLeave(wdt->original);
+    success = true;
+    goto cleanup;
+  }
+  hr = IDropTarget_DragOver(wdt->original, ctx->key_state, ptl, &effect);
+  if (FAILED(hr)) {
+    IDropTarget_DragLeave(wdt->original);
+    OV_ERROR_SET(&err, ov_error_type_hresult, hr, "IDropTarget_DragOver failed");
+    goto cleanup;
+  }
+  if (effect == DROPEFFECT_NONE) {
+    gcmz_logf_warn(NULL,
+                   NULL,
+                   "DragOver rejected drop: window=0x%1$08lX effect=0x%2$08lX",
+                   (unsigned long)(uintptr_t)wdt->main_window,
+                   (unsigned long)effect);
+    IDropTarget_DragLeave(wdt->original);
+    success = true;
+    goto cleanup;
+  }
+  hr = IDropTarget_Drop(wdt->original, ectx->dataobj, ctx->key_state, ptl, &effect);
+  if (FAILED(hr)) {
+    OV_ERROR_SET(&err, ov_error_type_hresult, hr, "IDropTarget_Drop failed");
+    goto cleanup;
+  }
+  success = true;
+
+cleanup:
+  if (ectx->dataobj) {
+    IDataObject_Release(ectx->dataobj);
+    ectx->dataobj = NULL;
+  }
+  if (ectx->file_list) {
+    cleanup_temporary_files_in_list(d, ectx->file_list);
+    gcmz_file_list_destroy(&ectx->file_list);
+  }
+  OV_FREE(&ectx);
+  if (!success) {
+    gcmz_logf_warn(&err, NULL, "%1$hs", "External drop completion failed");
+    OV_ERROR_REPORT(&err, NULL);
+  }
+}
+
+bool gcmz_drop_simulate_drop_external(struct gcmz_drop *const d,
+                                      void *const window,
+                                      void *const dataobj,
+                                      int const x,
+                                      int const y,
+                                      bool const use_exo_converter,
+                                      gcmz_drop_completion_callback const completion_callback,
+                                      void *const completion_userdata,
+                                      struct ov_error *const err) {
+  if (!d || !dataobj || !window || !completion_callback) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
   }
 
   bool result = false;
-  IDataObject *pDataObject = NULL;
+  IDataObject *pDataObject = (IDataObject *)dataobj;
+  struct gcmz_file_list *file_list = NULL;
+  IDataObject *final_dataobj = NULL;
+  struct complete_context_external *ectx = NULL;
+  wchar_t *managed_path = NULL;
+  DWORD dwEffect = DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK;
+  POINTL ptl = {0};
 
-  pDataObject = create_simulation_dataobj(file_list, x, y, err);
-  if (!pDataObject) {
-    OV_ERROR_ADD_TRACE(err);
-    goto cleanup;
+  {
+    // Keep client coordinates for now - they will be converted to screen coordinates later
+    ptl.x = x;
+    ptl.y = y;
+
+    // Step 1: Extract files from IDataObject
+    file_list = gcmz_file_list_create(err);
+    if (!file_list) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+    if (!d->extract_fn(pDataObject, file_list, d->callback_userdata, err)) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+
+    // Step 2: EXO conversion (if enabled)
+    if (use_exo_converter && d->lua_context) {
+#if GCMZ_DEBUG
+      gcmz_logf_verbose(NULL, NULL, "External API: Invoking EXO file conversion via Lua");
+#endif
+      struct ov_error exo_err = {0};
+      if (!gcmz_lua_call_exo_convert(d->lua_context, file_list, &exo_err)) {
+        gcmz_logf_warn(
+            &exo_err, "%1$hs", "%1$hs", gettext("EXO file conversion failed, proceeding with original files"));
+        OV_ERROR_DESTROY(&exo_err);
+      }
+    }
+
+    if (gcmz_file_list_count(file_list) == 0) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "no files to drop");
+      goto cleanup;
+    }
+
+    // Step 3: Call Lua handlers in sequence (Enter → Drop)
+    {
+      struct ov_error lua_err = {0};
+      if (!gcmz_lua_call_drag_enter(d->lua_context, file_list, 0, 0, true, &lua_err)) {
+        gcmz_logf_warn(&lua_err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drag_enter");
+        OV_ERROR_DESTROY(&lua_err);
+      }
+      if (!gcmz_lua_call_drop(d->lua_context, file_list, 0, 0, true, &lua_err)) {
+        gcmz_logf_warn(&lua_err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drop");
+        OV_ERROR_DESTROY(&lua_err);
+      }
+    }
+
+    // Step 4: Apply file management (copying, etc.)
+    if (d->file_manage_fn) {
+      size_t const file_count = gcmz_file_list_count(file_list);
+      for (size_t i = 0; i < file_count; i++) {
+        struct gcmz_file *file = gcmz_file_list_get_mutable(file_list, i);
+        if (!file || !file->path) {
+          continue;
+        }
+
+        if (!d->file_manage_fn(file->path, &managed_path, d->callback_userdata, err)) {
+          // Report error but continue processing other files
+          OV_ERROR_REPORT(err, NULL);
+          continue;
+        }
+
+        // If path changed, update the file list
+        if (wcscmp(file->path, managed_path) != 0) {
+          // If the old path was temporary, clean it up before replacing
+          if (file->temporary && d->cleanup_fn) {
+            struct ov_error cleanup_err = {0};
+            if (!d->cleanup_fn(file->path, d->callback_userdata, &cleanup_err)) {
+              OV_ERROR_REPORT(&cleanup_err, NULL);
+            }
+          }
+          wchar_t *old_path = file->path;
+          file->path = managed_path;
+          managed_path = old_path; // Will be freed in cleanup
+          file->temporary = false;
+        }
+        OV_ARRAY_DESTROY(&managed_path);
+      }
+    }
+
+    // Step 5: Create IDataObject with final file paths
+    final_dataobj = (IDataObject *)gcmz_drop_create_file_list_dataobj(file_list, ptl.x, ptl.y, err);
+    if (!final_dataobj) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+
+    // Step 6: Call completion callback (DragEnter→DragOver→Drop is done in complete_external_drop_impl)
+    // Allocate context on heap for async support
+    if (!OV_REALLOC(&ectx, 1, sizeof(*ectx))) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+    *ectx = (struct complete_context_external){
+        .pub =
+            {
+                .final_files = file_list,
+                .window = window,
+                .x = ptl.x,
+                .y = ptl.y,
+                .key_state = 0,
+                .modifier_keys = 0,
+                .drop_effect = dwEffect,
+                .userdata = completion_userdata,
+            },
+        .d = d,
+        .file_list = file_list,
+        .dataobj = final_dataobj,
+    };
+    // Transfer ownership to callback - callback MUST call complete_external_drop_impl
+    file_list = NULL;
+    final_dataobj = NULL;
+    completion_callback(&ectx->pub, complete_external_drop_impl, completion_userdata);
+    ectx = NULL; // Ownership transferred
   }
-
-  if (!gcmz_drop_inject_dataobject(d, window, pDataObject, x, y, use_exo_converter, err)) {
-    OV_ERROR_ADD_TRACE(err);
-    goto cleanup;
-  }
-
   result = true;
+
 cleanup:
-  if (pDataObject) {
-    IDataObject_Release(pDataObject);
-    pDataObject = NULL;
+  if (ectx) {
+    OV_FREE(&ectx);
+  }
+  if (managed_path) {
+    OV_ARRAY_DESTROY(&managed_path);
+  }
+  if (final_dataobj) {
+    IDataObject_Release(final_dataobj);
+  }
+  if (file_list) {
+    cleanup_temporary_files_in_list(d, file_list);
+    gcmz_file_list_destroy(&file_list);
   }
   return result;
 }

@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.10)
 find_program(CLANG_FORMAT_EXE clang-format)
 file(GLOB_RECURSE sources LIST_DIRECTORIES false CONFIGURE_DEPENDS "*.c" "*.h")
 list(FILTER sources EXCLUDE REGEX "${CMAKE_CURRENT_SOURCE_DIR}/3rd")
+list(FILTER sources EXCLUDE REGEX "test_🌙_module\\.(c|h)")
 add_custom_target(${PROJECT_NAME}-format ALL
   COMMAND ${CLANG_FORMAT_EXE} -style=file -i ${sources}
 )
@@ -261,7 +262,40 @@ target_link_libraries(test_analyze PRIVATE
 )
 add_test(NAME test_analyze COMMAND test_analyze)
 
-add_executable(test_lua lua_test.c file.c lua.c luautil.c)
+# Test module for Lua C module cleanup verification
+add_library(test_cleanup SHARED test_data/test_cleanup_module.c)
+target_link_libraries(test_cleanup PRIVATE
+  gcmzdrops_intf
+  "${LUAJIT_DLL}"
+)
+set_target_properties(test_cleanup PROPERTIES
+  OUTPUT_NAME "test_cleanup"
+  PREFIX ""
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test_data/lua_modules"
+)
+
+# Test module with Unicode (emoji) name for UTF-8 path handling verification
+add_library(test_unicode SHARED test_data/test_🌙_module.c test_data/test_🌙_module.def)
+target_link_libraries(test_unicode PRIVATE
+  gcmzdrops_intf
+  "${LUAJIT_DLL}"
+)
+set_target_properties(test_unicode PROPERTIES
+  OUTPUT_NAME "test_🌙"
+  PREFIX ""
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test_data/lua_modules"
+)
+
+# Copy Unicode test Lua script to build directory
+add_custom_command(
+  TARGET test_unicode POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_data/test_🌙.lua"
+    "${CMAKE_CURRENT_BINARY_DIR}/test_data/test_🌙.lua"
+  COMMENT "Copying Unicode test Lua script"
+)
+
+add_executable(test_lua lua_test.c file.c logf.c lua.c luautil.c)
 target_link_libraries(test_lua PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"
@@ -272,6 +306,16 @@ target_link_libraries(test_lua PRIVATE
   shlwapi
 )
 add_test(NAME test_lua COMMAND test_lua)
+add_dependencies(test_lua test_cleanup test_unicode)
+
+add_executable(test_luautil luautil_test.c luautil.c)
+target_link_libraries(test_luautil PRIVATE
+  gcmzdrops_intf
+  "${LUAJIT_DLL}"
+  ovbase
+  ovl
+)
+add_test(NAME test_luautil COMMAND test_luautil)
 
 add_executable(test_lua_api lua_api_test.c lua_api.c luautil.c)
 target_link_libraries(test_lua_api PRIVATE
@@ -282,7 +326,7 @@ target_link_libraries(test_lua_api PRIVATE
 )
 add_test(NAME test_lua_api COMMAND test_lua_api)
 
-add_executable(test_exo_lua exo_lua_test.c lua_api.c luautil.c lua.c file.c ini_reader.c)
+add_executable(test_exo_lua exo_lua_test.c logf.c lua_api.c luautil.c lua.c file.c ini_reader.c)
 target_link_libraries(test_exo_lua PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"

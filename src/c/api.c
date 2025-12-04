@@ -29,7 +29,7 @@ enum {
   //     * Added flags field to detect English/Simplified Chinese translation patches
   //     * Translation-patched environments require specialized *.exo files (workaround added in GCMZDrops v0.4.0)
   // 3 - AviUtl ExEdit2.0 or later    + GCMZDrops v2.0alpha1 or later
-  //     * Added aviutl2_ver and gcmz_ver fields
+  //     * Added aviutl2_ver and gcmz_ver fields, layer == 0 is no longer invalid
   //     * Version bumped due to major changes in AviUtl ExEdit2 (*.exo no longer supported, etc.)
   //     * COPYDATASTRUCT.dwData = 1 enables automatic *.exo -> *.object conversion
   //     * COPYDATASTRUCT.dwData = 2 disables automatic *.exo conversion
@@ -40,6 +40,12 @@ enum {
   request_timeout_ms = 5000,
   timer_interval_ms = 5000,
   timer_id = 1,
+};
+
+enum external_api_format_version {
+  external_api_format_v0 = 0, // Non-JSON format, legacy
+  external_api_format_v1 = 1, // JSON format with EXO conversion
+  external_api_format_v2 = 2, // JSON format without EXO conversion, accept layer == 0
 };
 
 enum {
@@ -240,7 +246,8 @@ cleanup:
   return result;
 }
 
-static bool validate_request_limits(struct gcmz_api_request_params const *const params) {
+static bool validate_request_limits(enum external_api_format_version const format_version,
+                                    struct gcmz_api_request_params const *const params) {
   if (!params) {
     return false;
   }
@@ -260,7 +267,7 @@ static bool validate_request_limits(struct gcmz_api_request_params const *const 
       goto cleanup;
     }
   }
-  if (params->layer == 0) {
+  if ((format_version == external_api_format_v0 || format_version == external_api_format_v1) && params->layer == 0) {
     goto cleanup;
   }
   if (params->frame_advance < 0) {
@@ -713,21 +720,21 @@ static NODISCARD LRESULT handle_wm_copydata(struct gcmz_api *const api, HWND con
   }
   ctx->params.files = ctx->files;
   switch (cds->dwData) {
-  case 0: // deprecated format
+  case external_api_format_v0: // deprecated format
     if (!parse_v0_request((wchar_t const *)cds->lpData, cds->cbData / sizeof(wchar_t), &ctx->params, &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
     ctx->params.use_exo_converter = true; // Legacy format: EXO conversion enabled
     break;
-  case 1: // JSON format with EXO conversion
+  case external_api_format_v1: // JSON format with EXO conversion
     if (!parse_v1_request((char const *)cds->lpData, cds->cbData, &ctx->params, &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
     ctx->params.use_exo_converter = true; // JSON format: EXO conversion enabled
     break;
-  case 2: // JSON format without EXO conversion
+  case external_api_format_v2: // JSON format without EXO conversion, accept layer == 0
     if (!parse_v1_request((char const *)cds->lpData, cds->cbData, &ctx->params, &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
@@ -740,7 +747,7 @@ static NODISCARD LRESULT handle_wm_copydata(struct gcmz_api *const api, HWND con
   }
 
   // Validate the complete request
-  if (!validate_request_limits(&ctx->params)) {
+  if (!validate_request_limits((enum external_api_format_version)cds->dwData, &ctx->params)) {
     OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "Request validation failed");
     goto cleanup;
   }

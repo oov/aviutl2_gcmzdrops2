@@ -53,7 +53,7 @@ typedef bool (*gcmz_drop_file_manage_fn)(wchar_t const *source_file,
  * @param cleanup_fn Temporary files cleanup function
  * @param file_manage_fn File management function for copying/managing files (optional, can be NULL)
  * @param callback_userdata Shared user data for all callback functions
- * @param lua_context Lua context for scripting hooks (optional, can be NULL)
+ * @param lua_context Lua context for scripting hooks
  * @param err [out] Error information on failure
  * @return Drop context pointer on success, NULL on failure
  */
@@ -82,64 +82,98 @@ bool gcmz_drop_register_window(struct gcmz_drop *const ctx, void *const window, 
 void gcmz_drop_destroy(struct gcmz_drop **const ctx);
 
 /**
- * @brief Simulate file drop operation
+ * @brief Create IDataObject from file list with CF_HDROP format
+ *
+ * Creates a new IDataObject containing file paths in CF_HDROP format.
+ * The returned object must be released by the caller using IDataObject_Release.
+ *
+ * @param file_list File list to include in the data object
+ * @param x X coordinate to store in DROPFILES structure
+ * @param y Y coordinate to store in DROPFILES structure
+ * @param err [out] Error information on failure
+ * @return IDataObject pointer (as void*) on success, NULL on failure
+ */
+void *gcmz_drop_create_file_list_dataobj(struct gcmz_file_list const *const file_list,
+                                         int const x,
+                                         int const y,
+                                         struct ov_error *const err);
+
+/**
+ * @brief Context for drop completion
+ *
+ * Contains all parameters needed for IDropTarget::Drop.
+ * Fields can be modified before calling complete function.
+ */
+struct gcmz_drop_complete_context {
+  // Processed data (read-only)
+  struct gcmz_file_list *final_files; ///< Processed file list after Lua hooks and file management
+
+  // Drop parameters (modifiable)
+  void *window;           ///< Target window handle
+  int x;                  ///< Drop X coordinate (screen coordinates)
+  int y;                  ///< Drop Y coordinate (screen coordinates)
+  uint32_t key_state;     ///< Key state flags (MK_CONTROL, MK_SHIFT, etc.)
+  uint32_t modifier_keys; ///< Additional modifier keys (gcmz_modifier_key_flags)
+  uint32_t drop_effect;   ///< Allowed drop effects (DROPEFFECT_*)
+
+  // User data
+  void *userdata; ///< User data passed via completion_userdata parameter
+};
+
+/**
+ * @brief Complete function type for finishing drop operation
+ *
+ * This function MUST be called exactly once after the completion callback is invoked.
+ * It performs either the actual drop or cancellation, and releases all resources.
+ * Can be called synchronously within the callback or asynchronously later.
+ *
+ * @param ctx Complete context (will be invalidated and freed after this call)
+ * @param execute_drop true to execute IDropTarget::Drop, false to call DragLeave (cancel)
+ */
+typedef void (*gcmz_drop_complete_func)(struct gcmz_drop_complete_context *ctx, bool execute_drop);
+
+/**
+ * @brief Callback invoked after drop processing is complete
+ *
+ * This callback is called after all Lua hooks and file management have been executed.
+ * The callback receives the complete context and a complete function.
+ *
+ * IMPORTANT: The complete function MUST be called exactly once, either:
+ * - Immediately within this callback, or
+ * - Later asynchronously (e.g., after showing a dialog, network operation, etc.)
+ *
+ * @param ctx Complete context (valid until complete is called)
+ * @param complete Function to complete the drop operation (MUST be called exactly once)
+ * @param userdata User data passed via completion_userdata parameter
+ */
+typedef void (*gcmz_drop_completion_callback)(struct gcmz_drop_complete_context *ctx,
+                                              gcmz_drop_complete_func complete,
+                                              void *userdata);
+
+/**
+ * @brief Simulate file drop operation with IDataObject
+ *
+ * Simulates a drag-and-drop operation by passing the IDataObject to the
+ * specified window's drop target at the given coordinates.
  *
  * @param ctx Drop context
  * @param window Window handle where drop is simulated (must be registered)
- * @param file_list File list to drop
- * @param x Drop X coordinate
- * @param y Drop Y coordinate
+ * @param dataobj IDataObject pointer to drop
+ * @param x Drop X coordinate (client coordinates)
+ * @param y Drop Y coordinate (client coordinates)
  * @param use_exo_converter Whether to enable EXO conversion
+ * @param from_external_api Whether this drop originated from external API
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
 bool gcmz_drop_simulate_drop(struct gcmz_drop *const ctx,
                              void *const window,
-                             struct gcmz_file_list const *const file_list,
+                             void *const dataobj,
                              int const x,
                              int const y,
                              bool const use_exo_converter,
+                             bool const from_external_api,
                              struct ov_error *const err);
-
-/**
- * @brief Create IDataObject from file list
- *
- * Creates a COM IDataObject containing the specified files. The caller must call
- * IDataObject_Release() on the returned object when done.
- *
- * @param ctx Drop context
- * @param file_list File list to include in the data object
- * @param use_exo_converter Whether to wrap with EXO converter
- * @param err [out] Error information on failure
- * @return IDataObject pointer on success (caller must Release), NULL on failure
- */
-void *gcmz_drop_create_dataobject(struct gcmz_drop *const ctx,
-                                  struct gcmz_file_list const *const file_list,
-                                  bool const use_exo_converter,
-                                  struct ov_error *const err);
-
-/**
- * @brief Inject IDataObject to registered window
- *
- * Simulates a drag-and-drop operation by injecting the IDataObject to the
- * specified window's drop target at the given coordinates.
- *
- * @param ctx Drop context
- * @param window Window handle where drop is injected (must be registered)
- * @param dataobj IDataObject pointer to inject
- * @param x Drop X coordinate (client coordinates)
- * @param y Drop Y coordinate (client coordinates)
- * @param use_exo_converter Whether to enable EXO conversion
- * @param err [out] Error information on failure
- * @return true on success, false on failure
- */
-bool gcmz_drop_inject_dataobject(struct gcmz_drop *const ctx,
-                                 void *const window,
-                                 void *const dataobj,
-                                 int const x,
-                                 int const y,
-                                 bool const use_exo_converter,
-                                 struct ov_error *const err);
 
 /**
  * @brief Get the last right-click position across all registered windows
@@ -156,3 +190,42 @@ bool gcmz_drop_inject_dataobject(struct gcmz_drop *const ctx,
  */
 bool gcmz_drop_get_right_click_position(
     struct gcmz_drop *const ctx, void **const window, int *const x, int *const y, struct ov_error *const err);
+
+/**
+ * @brief Simulate file drop operation for external API with pre-processed Lua hooks
+ *
+ * This function is specifically designed for external API integration where Lua
+ * handlers need to be called independently from the normal hook-based drop flow.
+ *
+ * Unlike gcmz_drop_simulate_drop which uses the wrapped IDropTarget hook chain,
+ * this function:
+ * 1. Extracts files from the IDataObject
+ * 2. Performs EXO conversion if enabled
+ * 3. Calls Lua handlers (drag_enter, drop) in sequence
+ * 4. Applies file management (copying, etc.)
+ * 5. Calls completion callback with processed file list
+ * 6. Completion callback decides whether to drop or cancel
+ *
+ * This allows the completion callback to receive the fully processed file list
+ * and modify drop parameters before the actual drop occurs.
+ *
+ * @param ctx Drop context
+ * @param window Window handle where drop is simulated (must be registered)
+ * @param dataobj IDataObject pointer to drop
+ * @param x Drop X coordinate (client coordinates)
+ * @param y Drop Y coordinate (client coordinates)
+ * @param use_exo_converter Whether to enable EXO conversion
+ * @param completion_callback Callback for drop completion (required, must not be NULL)
+ * @param completion_userdata User data passed to completion callback
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+bool gcmz_drop_simulate_drop_external(struct gcmz_drop *const ctx,
+                                      void *const window,
+                                      void *const dataobj,
+                                      int const x,
+                                      int const y,
+                                      bool const use_exo_converter,
+                                      gcmz_drop_completion_callback const completion_callback,
+                                      void *const completion_userdata,
+                                      struct ov_error *const err);

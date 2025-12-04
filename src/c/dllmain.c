@@ -1,8 +1,3 @@
-#define TARGET_LUA_MODULE 0
-#define TARGET_AVIUTL2_FILTER_PLUGIN 0
-#define TARGET_AVIUTL2_SCRIPT_MODULE 0
-#define TARGET_AVIUTL2_PLUGIN 1
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -42,18 +37,11 @@
 #include <ovl/file.h>
 #include <ovl/os.h>
 #include <ovl/path.h>
-
-#if TARGET_AVIUTL2_FILTER_PLUGIN
-#  include <aviutl2_filter2.h>
-#endif
-#if TARGET_AVIUTL2_SCRIPT_MODULE
-#  include <aviutl2_module2.h>
-#endif
-#if TARGET_AVIUTL2_PLUGIN
-#  include <aviutl2_plugin2.h>
-#endif
+#include <ovl/source.h>
+#include <ovl/source/file.h>
 
 #include <aviutl2_logger2.h>
+#include <aviutl2_plugin2.h>
 
 #include "analyze.h"
 #include "api.h"
@@ -69,6 +57,7 @@
 #include "error.h"
 #include "file.h"
 #include "gcmz_types.h"
+#include "ini_reader.h"
 #include "logf.h"
 #include "lua.h"
 #include "lua_api.h"
@@ -107,7 +96,7 @@ static mtx_t g_init_mtx;
 static cnd_t g_init_cond;
 static ov_tribool g_plugin_registered = ov_indeterminate;
 
-static bool analyze_get_style_callback(struct gcmz_analyze_style *style, void *userdata, struct ov_error *const err) {
+static bool get_style(struct gcmz_analyze_style *style, void *userdata, struct ov_error *const err) {
   (void)userdata;
 
   if (!style) {
@@ -153,7 +142,6 @@ struct cursor_position_params {
   void *window;
 };
 
-// Helper function to determine cursor position for drop operation
 static bool determine_cursor_position(int const target_layer,
                                       struct cursor_position_params *const params,
                                       struct ov_error *const err) {
@@ -255,57 +243,348 @@ cleanup:
   return result;
 }
 
-static void api_request_callback(struct gcmz_api_request_params *const params,
-                                 gcmz_api_request_complete_func const complete) {
+/**
+ * @brief Check if file has [Object] section in INI format
+ *
+ * @param filepath Path to the file to check
+ * @return true if file has [Object] section
+ */
+static bool has_object_section(wchar_t const *const filepath) {
+  if (!filepath) {
+    return false;
+  }
+
+  struct gcmz_ini_reader *reader = NULL;
+  bool result = false;
+
+  {
+    if (!gcmz_ini_reader_create(&reader, NULL)) {
+      goto cleanup;
+    }
+    if (!gcmz_ini_reader_load_file(reader, filepath, NULL)) {
+      goto cleanup;
+    }
+    struct gcmz_ini_iter iter = {0};
+    while (gcmz_ini_reader_iter_sections(reader, &iter)) {
+      if (iter.name_len == 6 && strncmp(iter.name, "Object", 6) == 0) {
+        result = true;
+        break;
+      }
+    }
+  }
+
+cleanup:
+  gcmz_ini_reader_destroy(&reader);
+  return result;
+}
+
+/**
+ * @brief Check if file list contains exactly one .object file with [Object] section
+ *
+ * @param list File list to check
+ * @return true if list contains exactly one valid .object file
+ */
+static bool is_single_object_file(struct gcmz_file_list const *const list) {
+  if (!list || gcmz_file_list_count(list) != 1) {
+    return false;
+  }
+  struct gcmz_file const *const file = gcmz_file_list_get(list, 0);
+  if (!file || !file->path) {
+    return false;
+  }
+  wchar_t const *const ext = wcsrchr(file->path, L'.');
+  if (!ext || _wcsicmp(ext, L".object") != 0) {
+    return false;
+  }
+  return has_object_section(file->path);
+}
+
+/**
+ * @brief Context for create_object_from_alias call
+ */
+struct create_object_context {
+  char const *alias_content; ///< UTF-8 alias content
+  int layer;                 ///< Target layer (0-based)
+  int frame;                 ///< Target frame (0 means current cursor position)
+  int length;                ///< Object length
+  bool success;              ///< Result of operation
+};
+
+/**
+ * @brief Edit section callback for creating object via official API
+ */
+static void create_object_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct create_object_context *const ctx = (struct create_object_context *)param;
+  if (!ctx || !edit || !edit->create_object_from_alias) {
+    return;
+  }
+  int const frame = (ctx->frame == 0 && edit->info) ? edit->info->frame : ctx->frame;
+  int const layer = (ctx->layer == 0 && edit->info) ? edit->info->layer : ctx->layer;
+  aviutl2_object_handle obj = edit->create_object_from_alias(ctx->alias_content, layer, frame, ctx->length);
+  ctx->success = (obj != NULL);
+}
+
+/**
+ * @brief Create object using official API
+ *
+ * @param files File list containing single .object file
+ * @param layer Target layer (1-based, following external API convention)
+ * @param err Error information on failure
+ * @return true on success
+ */
+static bool
+create_object_via_official_api(struct gcmz_file_list const *const files, int const layer, struct ov_error *const err) {
+  if (!files || !g_edit) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  struct gcmz_file const *const file = gcmz_file_list_get(files, 0);
+  if (!file || !file->path) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  struct ovl_source *source = NULL;
+  char *content = NULL;
+  bool result = false;
+
+  {
+    // Read .object file content (UTF-8)
+    if (!ovl_source_file_create(file->path, &source, err)) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+
+    uint64_t const file_size = ovl_source_size(source);
+    if (file_size == UINT64_MAX || file_size > SIZE_MAX - 1) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+      goto cleanup;
+    }
+
+    size_t const size = (size_t)file_size;
+    if (!OV_ARRAY_GROW(&content, size + 1)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+
+    size_t const bytes_read = ovl_source_read(source, content, 0, size);
+    if (bytes_read != size) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+      goto cleanup;
+    }
+    content[size] = '\0';
+
+    struct create_object_context ctx = {
+        .alias_content = content,
+        .layer = layer,
+        .frame = 0,  // Use current cursor position
+        .length = 1, // Default length (alias content may override)
+        .success = false,
+    };
+
+    if (!g_edit->call_edit_section_param) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "call_edit_section_param not available");
+      goto cleanup;
+    }
+
+    if (!g_edit->call_edit_section_param(&ctx, create_object_edit_section)) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "call_edit_section_param failed");
+      goto cleanup;
+    }
+
+    if (!ctx.success) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "create_object_from_alias returned NULL");
+      goto cleanup;
+    }
+  }
+
+  result = true;
+
+cleanup:
+  if (source) {
+    ovl_source_destroy(&source);
+  }
+  if (content) {
+    OV_ARRAY_DESTROY(&content);
+  }
+  return result;
+}
+
+/**
+ * @brief Context for external API drop completion callback
+ */
+struct external_api_drop_context {
+  int layer;                                       ///< Target layer (1-based)
+  int frame_advance;                               ///< Frame advance after drop
+  gcmz_api_request_complete_func request_complete; ///< Callback to signal request completion
+  struct gcmz_api_request_params *request_params;  ///< Original request params for completion callback
+};
+
+/**
+ * @brief Completion callback for external API drop operations
+ *
+ * Called after Lua processing completes. Receives the complete context and
+ * can either:
+ * 1. Handle single .object files via official API (call complete with false)
+ * 2. Modify coordinates and call complete with true for traditional drop
+ */
+static void on_drop_completion(struct gcmz_drop_complete_context *const ctx,
+                               gcmz_drop_complete_func const complete,
+                               void *const userdata) {
+  if (!ctx || !complete) {
+    return;
+  }
+
+  // userdata is only set for external API drops (heap-allocated, must be freed)
+  struct external_api_drop_context *api_ctx = (struct external_api_drop_context *)userdata;
+  if (!api_ctx) {
+    // invalid state, just complete drop
+    if (complete) {
+      complete(ctx, true);
+    }
+    return;
+  }
+
+  struct ov_error err = {0};
+  bool execute_drop = true;
+
+  {
+    // Handle single .object files via official API
+    // When api_ctx->layer is negative, it means relative positioning from the current scroll position.
+    // To obtain that position, data retrieval in an environment where g_unknown_binary == false is required,
+    // but it seems unnecessary to support that level, so it is excluded.
+    if (is_single_object_file(ctx->final_files) && api_ctx->layer >= 0) {
+      // Try to create object via official API
+      if (create_object_via_official_api(ctx->final_files, api_ctx->layer, &err)) {
+        // Success: drop handled via official API, call complete with false (DragLeave)
+        execute_drop = false;
+        goto cleanup;
+      }
+      // On failure, fall back to traditional drop with proper coordinates
+      gcmz_logf_warn(&err, "%1$hs", "%1$hs", gettext("official API failed, falling back to traditional drop"));
+      OV_ERROR_DESTROY(&err);
+    }
+
+    // For non-.object files or official API failure, calculate proper coordinates
+    // using determine_cursor_position for traditional drop flow
+    struct cursor_position_params pos_params = {0};
+    if (!determine_cursor_position(api_ctx->layer, &pos_params, &err)) {
+      // Failed to determine cursor position - log warning and use default coordinates
+      gcmz_logf_warn(
+          &err, "%1$hs", "%1$hs", gettext("failed to determine cursor position, using default drop coordinates"));
+      OV_ERROR_DESTROY(&err);
+      // Execute drop with original coordinates
+      goto cleanup;
+    }
+
+    ctx->window = pos_params.window;
+    ctx->x = pos_params.x;
+    ctx->y = pos_params.y;
+    gcmz_logf_verbose(NULL, NULL, "drop to: window=%1$px x=%2$d, y=%3$d", ctx->window, ctx->x, ctx->y);
+  }
+
+cleanup:
+  complete(ctx, execute_drop);
+
+  // Handle frame advance after drop completes
+  if (api_ctx->frame_advance != 0) {
+    struct aviutl2_edit_info edit_info = {0};
+    g_edit->get_edit_info(&edit_info, sizeof(edit_info));
+    int const move_to = edit_info.frame + api_ctx->frame_advance;
+    gcmz_aviutl2_set_cursor_frame(move_to);
+    g_edit->get_edit_info(&edit_info, sizeof(edit_info));
+    if (move_to != edit_info.frame) {
+      gcmz_logf_warn(&err, "%1$hs", "%1$hs", gettext("failed to move cursor after drop"));
+      OV_ERROR_DESTROY(&err);
+    }
+  }
+
+  if (api_ctx->request_complete) {
+    api_ctx->request_complete(api_ctx->request_params);
+  }
+  OV_FREE(&api_ctx);
+}
+
+static void request_api(struct gcmz_api_request_params *const params, gcmz_api_request_complete_func const complete) {
   if (!params || !complete) {
     return;
   }
 
   struct ov_error err = {0};
   bool success = false;
+  struct external_api_drop_context *api_ctx = NULL;
 
   {
     if (!gcmz_file_list_count(params->files)) {
       success = true;
       goto cleanup;
     }
-    struct cursor_position_params pos_params = {0};
-    if (!determine_cursor_position(params->layer, &pos_params, &err)) {
+
+    // Allocate context on heap for async callback
+    if (!OV_REALLOC(&api_ctx, 1, sizeof(*api_ctx))) {
+      OV_ERROR_SET_GENERIC(&err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+    *api_ctx = (struct external_api_drop_context){
+        .layer = params->layer,
+        .frame_advance = params->frame_advance,
+        .request_complete = complete,
+        .request_params = params,
+    };
+    if (!gcmz_file_list_count(params->files)) {
+      success = true;
+      goto cleanup;
+    }
+
+    // Get window from window list - use first available window
+    size_t num_windows = 0;
+    struct gcmz_window_info const *const windows = gcmz_window_list_get(g_window_list, &num_windows);
+    if (!windows || num_windows == 0) {
+      OV_ERROR_SET(
+          &err, ov_error_type_generic, ov_error_generic_fail, "no registered windows available for drop target");
+      goto cleanup;
+    }
+
+    // Use window center coordinates
+    // The completion callback will use official API for single .object files,
+    // which doesn't need accurate coordinates
+    void *const window = windows[0].window;
+    int const x = windows[0].width / 2;
+    int const y = windows[0].height / 2;
+
+    // Create IDataObject from file list
+    void *dataobj = gcmz_drop_create_file_list_dataobj(params->files, x, y, &err);
+    if (!dataobj) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
-    if (!gcmz_drop_simulate_drop(
-            g_drop, pos_params.window, params->files, pos_params.x, pos_params.y, params->use_exo_converter, &err)) {
-      OV_ERROR_ADD_TRACE(&err);
+
+    // External API uses gcmz_drop_simulate_drop_external to call Lua handlers
+    // independently before passing to the original IDropTarget (bypassing hook chain)
+    bool const drop_ok = gcmz_drop_simulate_drop_external(
+        g_drop, window, dataobj, x, y, params->use_exo_converter, on_drop_completion, api_ctx, &err);
+    IDataObject_Release((IDataObject *)dataobj);
+    dataobj = NULL;
+    if (!drop_ok) {
+      OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "simulated drop failed");
       goto cleanup;
     }
-    if (params->frame_advance != 0) {
-      struct aviutl2_edit_info edit_info = {0};
-      g_edit->get_edit_info(&edit_info, sizeof(edit_info));
-      int const move_to = edit_info.frame + params->frame_advance;
-      gcmz_aviutl2_set_cursor_frame(move_to);
-      g_edit->get_edit_info(&edit_info, sizeof(edit_info));
-      if (move_to != edit_info.frame) {
-        OV_ERROR_SETF(&err,
-                      ov_error_type_generic,
-                      ov_error_generic_fail,
-                      "%1$s",
-                      "%1$s",
-                      gettext("failed to move cursor to target position"));
-        goto cleanup;
-      }
-    }
+    api_ctx = NULL; // Ownership transferred to callback
   }
 
   success = true;
 
 cleanup:
+  if (api_ctx) {
+    OV_FREE(&api_ctx);
+  }
   if (!success) {
     gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to drop from external API request"));
     OV_ERROR_REPORT(&err, NULL);
-  }
-  if (complete) {
-    complete(params);
+    if (complete) {
+      complete(params);
+    }
   }
 }
 
@@ -352,25 +631,13 @@ cleanup:
   }
 }
 
-#if !TARGET_AVIUTL2_PLUGIN
-static void api_update_callback(struct gcmz_api *const api, void *const userdata) {
-#  error "this mechanism is not supported."
-}
-#endif
-
 static bool create_external_api_once(struct ov_error *const err) {
   bool result = false;
 
   g_api = gcmz_api_create(
       &(struct gcmz_api_options){
-          .request_callback = api_request_callback,
-#if TARGET_AVIUTL2_PLUGIN
-          // No periodic update needed: project_load_handler updates via register_project_load_handler
+          .request_callback = request_api,
           .update_callback = NULL,
-#else
-          // Periodic update required: register_project_load_handler is unavailable in non-plugin builds
-          .update_callback = api_update_callback,
-#endif
           .userdata = NULL,
           .aviutl2_ver = g_aviutl2_version,
           .gcmz_ver = GCMZ_VERSION_UINT32,
@@ -466,11 +733,11 @@ static bool create_external_api(bool const use_retry, struct ov_error *const err
   }
 }
 
-static bool analyze_complete_callback(struct gcmz_analyze_save_context *const ctx,
-                                      gcmz_analyze_save_to_file_func save_to_file,
-                                      enum gcmz_analyze_status const status,
-                                      void *userdata,
-                                      struct ov_error *const err) {
+static bool complete_analyze(struct gcmz_analyze_save_context *const ctx,
+                             gcmz_analyze_save_to_file_func save_to_file,
+                             enum gcmz_analyze_status const status,
+                             void *userdata,
+                             struct ov_error *const err) {
   (void)userdata;
   (void)status;
 
@@ -603,7 +870,7 @@ static void log_analyze(struct gcmz_analyze_result const *const result) {
                     result->cursor.height);
 }
 
-static void tray_menu_debug_capture_callback(void *userdata, struct gcmz_tray_callback_event *const event) {
+static void tray_menu_debug_capture(void *userdata, struct gcmz_tray_callback_event *const event) {
   (void)userdata;
   static wchar_t label[64];
   switch (event->type) {
@@ -639,7 +906,7 @@ static void tray_menu_debug_capture_callback(void *userdata, struct gcmz_tray_ca
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
-    if (!gcmz_analyze_run(g_capture, display_zoom, &result, analyze_complete_callback, NULL, &err)) {
+    if (!gcmz_analyze_run(g_capture, display_zoom, &result, complete_analyze, NULL, &err)) {
       gcmz_logf_error(&err, "%s", "%s", "failed to capture for debug");
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
@@ -657,7 +924,7 @@ static void tray_menu_debug_capture_callback(void *userdata, struct gcmz_tray_ca
   }
 }
 
-static void tray_menu_config_dialog_callback(void *userdata, struct gcmz_tray_callback_event *const event) {
+static void tray_menu_config(void *userdata, struct gcmz_tray_callback_event *const event) {
   (void)userdata;
   static bool dialog_open;
   static wchar_t label[64];
@@ -715,7 +982,7 @@ static void tray_menu_config_dialog_callback(void *userdata, struct gcmz_tray_ca
 
 #ifndef NDEBUG
 
-static void debug_output_project_info(void) {
+static void debug_output_info(void) {
   gcmz_logf_verbose(NULL, "%1$s", "† verbose output †");
   gcmz_logf_info(NULL, "%1$s", "† info output †");
   gcmz_logf_warn(NULL, "%1$s", "† warn output †");
@@ -765,7 +1032,7 @@ static void debug_output_project_info(void) {
   gcmz_logf_info(NULL, NULL, "[extended] project_path: %ls", project_path ? project_path : L"(null)");
 }
 
-static void tray_menu_debug_output_callback(void *userdata, struct gcmz_tray_callback_event *const event) {
+static void tray_menu_debug_output(void *userdata, struct gcmz_tray_callback_event *const event) {
   (void)userdata;
   static wchar_t label[64];
   switch (event->type) {
@@ -793,7 +1060,7 @@ static void tray_menu_debug_output_callback(void *userdata, struct gcmz_tray_cal
       goto cleanup;
     }
     log_analyze(&capture);
-    debug_output_project_info();
+    debug_output_info();
     success = true;
 
   cleanup:
@@ -805,7 +1072,7 @@ static void tray_menu_debug_output_callback(void *userdata, struct gcmz_tray_cal
   }
 }
 
-static void tray_menu_test_external_api_complete_callback(struct gcmz_api_request_params *const params) {
+static void tray_menu_test_complete_external_api(struct gcmz_api_request_params *const params) {
   (void)params;
   gcmz_logf_info(NULL, "%s", "%s", "API request test completed");
 }
@@ -867,7 +1134,7 @@ static void tray_menu_test_external_api(void *userdata, struct gcmz_tray_callbac
           .userdata = NULL,
       };
 
-      api_request_callback(&params, tray_menu_test_external_api_complete_callback);
+      request_api(&params, tray_menu_test_complete_external_api);
       files = NULL;
       temp_path = NULL;
     }
@@ -895,7 +1162,7 @@ static void tray_menu_test_external_api(void *userdata, struct gcmz_tray_callbac
 #endif // NDEBUG
 
 static bool
-drop_extract_callback(void *dataobj, struct gcmz_file_list *dest, void *userdata, struct ov_error *const err) {
+extract_from_dataobj(void *dataobj, struct gcmz_file_list *dest, void *userdata, struct ov_error *const err) {
   (void)userdata;
   if (!gcmz_dataobj_extract_from_dataobj(dataobj, dest, err)) {
     OV_ERROR_ADD_TRACE(err);
@@ -904,7 +1171,7 @@ drop_extract_callback(void *dataobj, struct gcmz_file_list *dest, void *userdata
   return true;
 }
 
-static bool schedule_cleanup_callback(wchar_t const *const path, void *userdata, struct ov_error *const err) {
+static bool schedule_cleanup(wchar_t const *const path, void *userdata, struct ov_error *const err) {
   (void)userdata;
   if (!gcmz_delayed_cleanup_schedule_file(path, err)) {
     OV_ERROR_ADD_TRACE(err);
@@ -913,10 +1180,10 @@ static bool schedule_cleanup_callback(wchar_t const *const path, void *userdata,
   return true;
 }
 
-static bool lua_api_get_project_data_callback(struct aviutl2_edit_info *edit_info,
-                                              char **project_path,
-                                              void *userdata,
-                                              struct ov_error *const err) {
+static bool get_project_data_utf8(struct aviutl2_edit_info *edit_info,
+                                  char **project_path,
+                                  void *userdata,
+                                  struct ov_error *const err) {
   (void)userdata;
   bool success = false;
 
@@ -945,7 +1212,7 @@ cleanup:
   return success;
 }
 
-static wchar_t *drop_get_save_path_callback(wchar_t const *filename, void *userdata, struct ov_error *const err) {
+static wchar_t *get_save_path(wchar_t const *filename, void *userdata, struct ov_error *const err) {
   (void)userdata;
   wchar_t *const r = gcmz_config_get_save_path(g_config, filename, err);
   if (!r) {
@@ -955,24 +1222,37 @@ static wchar_t *drop_get_save_path_callback(wchar_t const *filename, void *userd
   return r;
 }
 
-static bool drop_file_manage_callback(wchar_t const *source_file,
-                                      wchar_t **final_file,
-                                      void *userdata,
-                                      struct ov_error *const err) {
+static bool copy_file(wchar_t const *source_file, wchar_t **final_file, void *userdata, struct ov_error *const err) {
   (void)userdata;
   enum gcmz_processing_mode mode;
   if (!gcmz_config_get_processing_mode(g_config, &mode, err)) {
     OV_ERROR_ADD_TRACE(err);
     return false;
   }
-  if (!gcmz_copy(source_file, mode, drop_get_save_path_callback, NULL, final_file, err)) {
+  // gcmz_copy does not necessarily copy the file.
+  // If a file with the same hash value exists at the destination, it returns that path.
+  if (!gcmz_copy(source_file, mode, get_save_path, NULL, final_file, err)) {
     OV_ERROR_ADD_TRACE(err);
     return false;
   }
   return true;
 }
 
-static char *lua_api_temp_file_callback(void *userdata, char const *filename, struct ov_error *err) {
+static void lua_debug_print(void *userdata, char const *message) {
+  (void)userdata;
+  gcmz_logf_info(NULL, NULL, "[LUA] %1$hs", message);
+}
+
+static bool register_lua_api(struct lua_State *const L, void *userdata, struct ov_error *const err) {
+  (void)userdata;
+  if (!gcmz_lua_api_register(L, err)) {
+    OV_ERROR_ADD_TRACE(err);
+    return false;
+  }
+  return true;
+}
+
+static char *create_temp_file_utf8(void *userdata, char const *filename, struct ov_error *err) {
   (void)userdata;
   wchar_t *filename_w = NULL;
   wchar_t *dest_path_w = NULL;
@@ -1037,7 +1317,7 @@ cleanup:
   return NULL;
 }
 
-static char *lua_api_save_path_callback(void *userdata, char const *filename, struct ov_error *err) {
+static char *get_save_path_utf8(void *userdata, char const *filename, struct ov_error *err) {
   (void)userdata;
   wchar_t *filename_w = NULL;
   wchar_t *dest_path_w = NULL;
@@ -1103,10 +1383,8 @@ cleanup:
   return NULL;
 }
 
-static size_t get_window_list_callback(struct gcmz_window_info *windows,
-                                       size_t window_len,
-                                       void *userdata,
-                                       struct ov_error *const err) {
+static size_t
+get_window_list(struct gcmz_window_info *windows, size_t window_len, void *userdata, struct ov_error *const err) {
   (void)userdata;
   if (!windows || window_len == 0) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
@@ -1148,8 +1426,8 @@ static bool is_wine_environment(void) {
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
-static bool
-capture_window(HWND window, uint8_t **const data, int *const width, int *const height, struct ov_error *const err) {
+static bool capture_window_core(
+    HWND window, uint8_t **const data, int *const width, int *const height, struct ov_error *const err) {
   if (!window || !width || !height || !data) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
@@ -1285,10 +1563,10 @@ cleanup:
 /**
  * Callback function for capturing window bitmap data
  */
-static bool capture_window_callback(
-    void *window, uint8_t **data, int *width, int *height, void *userdata, struct ov_error *const err) {
+static bool
+capture_window(void *window, uint8_t **data, int *width, int *height, void *userdata, struct ov_error *const err) {
   (void)userdata;
-  return capture_window((HWND)window, data, width, height, err);
+  return capture_window_core((HWND)window, data, width, height, err);
 }
 
 /**
@@ -1416,7 +1694,7 @@ static void finalize(void *const userdata) {
   }
 }
 
-static NATIVE_CHAR const *project_path_provider_callback(void *userdata) {
+static NATIVE_CHAR const *get_project_path(void *userdata) {
   (void)userdata;
   return gcmz_aviutl2_get_project_path();
 }
@@ -1671,7 +1949,7 @@ static bool initialize(struct ov_error *const err) {
 
   g_config = gcmz_config_create(
       &(struct gcmz_config_options){
-          .project_path_provider = project_path_provider_callback,
+          .project_path_provider = get_project_path,
           .project_path_provider_userdata = NULL,
       },
       err);
@@ -1687,9 +1965,9 @@ static bool initialize(struct ov_error *const err) {
 
   if (!gcmz_analyze_create(&g_capture,
                            &(struct gcmz_analyze_options){
-                               .capture = capture_window_callback,
-                               .get_window_list = get_window_list_callback,
-                               .get_style = analyze_get_style_callback,
+                               .capture = capture_window,
+                               .get_window_list = get_window_list,
+                               .get_style = get_style,
                                .userdata = NULL,
                            },
                            err)) {
@@ -1709,27 +1987,37 @@ static bool initialize(struct ov_error *const err) {
   }
 
   gcmz_lua_api_set_options(&(struct gcmz_lua_api_options){
-      .temp_file_provider = lua_api_temp_file_callback,
-      .save_path_provider = lua_api_save_path_callback,
-      .get_project_data = lua_api_get_project_data_callback,
+      .temp_file_provider = create_temp_file_utf8,
+      .save_path_provider = get_save_path_utf8,
+      .get_project_data = get_project_data_utf8,
+      .debug_print = lua_debug_print,
       .userdata = NULL,
+      .aviutl2_ver = g_aviutl2_version,
+      .gcmz_ver = GCMZ_VERSION_UINT32,
   });
 
-  if (!gcmz_lua_create(&g_lua_ctx,
-                       &(struct gcmz_lua_options){
-                           .script_dir = script_dir,
-                           .api_register_callback = gcmz_lua_api_register,
-                           .schedule_cleanup_callback = schedule_cleanup_callback,
-                           .create_temp_file_callback = lua_api_temp_file_callback,
-                       },
-                       err)) {
+  if (!g_lua_ctx) {
+    // Lua context was not initialized in DllMain? Try to initialize here as well.
+    if (!gcmz_lua_create(&g_lua_ctx, err)) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+  }
+  if (!gcmz_lua_setup(g_lua_ctx,
+                      &(struct gcmz_lua_options){
+                          .script_dir = script_dir,
+                          .api_register_callback = register_lua_api,
+                          .schedule_cleanup_callback = schedule_cleanup,
+                          .create_temp_file_callback = create_temp_file_utf8,
+                      },
+                      err)) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
 
-  g_drop = gcmz_drop_create(drop_extract_callback,
-                            schedule_cleanup_callback,
-                            drop_file_manage_callback,
+  g_drop = gcmz_drop_create(extract_from_dataobj,
+                            schedule_cleanup,
+                            copy_file,
                             NULL,      // callback_userdata
                             g_lua_ctx, // lua_context
                             err);
@@ -1755,18 +2043,18 @@ static bool initialize(struct ov_error *const err) {
     }
   }
 
-  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_config_dialog_callback, NULL, err)) {
+  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_config, NULL, err)) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
 
-  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_debug_capture_callback, NULL, err)) {
+  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_debug_capture, NULL, err)) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
 
 #ifndef NDEBUG
-  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_debug_output_callback, NULL, err)) {
+  if (!gcmz_tray_add_menu_item(g_tray, tray_menu_debug_output, NULL, err)) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
@@ -1774,15 +2062,6 @@ static bool initialize(struct ov_error *const err) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
-#endif
-
-  // For non-plugin builds, signal that initialization is complete
-  // (RegisterPlugin won't be called, so we signal here instead)
-#if !TARGET_AVIUTL2_PLUGIN
-  mtx_lock(&g_init_mtx);
-  g_plugin_registered = ov_true;
-  cnd_signal(&g_init_cond);
-  mtx_unlock(&g_init_mtx);
 #endif
 
   success = true;
@@ -1811,96 +2090,6 @@ cleanup:
   return success;
 }
 
-/**
- * Get plugin information string with version
- * @return Plugin information string (e.g., "GCMZDrops v1.0 ( xxxxxxxx ) by oov")
- */
-static wchar_t const *get_information(void) {
-  static wchar_t buf[64];
-  if (buf[0] != L'\0') {
-    return buf;
-  }
-  ov_snprintf_wchar(buf, sizeof(buf) / sizeof(buf[0]), L"%1$hs", L"GCMZDrops %1$s by oov", GCMZ_VERSION);
-  return buf;
-}
-
-#if TARGET_LUA_MODULE
-struct userdata {
-  void *unused;
-};
-
-static int luafn_test(lua_State *L) {
-  (void)L;
-  // gcmz_aviutl2_debug_output();
-  return 0;
-}
-
-static int luafn___gc(lua_State *L) {
-  (void)L;
-#  if 0
-  if (lua_gettop(L) < 1) {
-    return luaL_error(L, "invalid number of parameters");
-  }
-  struct userdata *ud = lua_touserdata(L, 1);
-  if (!ud) {
-    return luaL_error(L, "invalid arguments");
-  }
-#  endif
-  finalize(NULL);
-  return 0;
-}
-
-int __declspec(dllexport) luaopen_GCMZDrops(lua_State *L);
-int __declspec(dllexport) luaopen_GCMZDrops(lua_State *L) {
-  static char const name[] = "GCMZDrops";
-  static char const meta_name[] = "GCMZDrops_Meta";
-
-  struct ov_error err = {0};
-  if (!initialize(&err)) {
-    return gcmz_luafn_err(L, &err);
-  }
-  struct userdata *ud = (struct userdata *)lua_newuserdata(L, sizeof(struct userdata));
-  if (!ud) {
-    return luaL_error(L, "lua_newuserdata failed");
-  }
-
-  {
-    luaL_newmetatable(L, meta_name);
-
-    lua_pushstring(L, "__index");
-    lua_newtable(L);
-    static luaL_Reg funcs[] = {
-        {"test", luafn_test},
-        {NULL, NULL},
-    };
-    luaL_register(L, NULL, funcs);
-    lua_settable(L, -3);
-
-    // LuaJIT cleanup timing might be unstable?
-    // Object destruction may fail and process may not terminate, so giving up on __gc cleanup
-    // gcmz_do cleanup can be done at WM_NCDESTROY timing, which provides higher stability
-#  if 0
-    lua_pushstring(L, "__gc");
-    lua_pushcfunction(L, luafn___gc);
-    lua_settable(L, -3);
-#  else
-    (void)luafn___gc;
-#  endif
-
-    lua_setmetatable(L, -2);
-  }
-
-  lua_pushvalue(L, -1);
-  lua_setglobal(L, name);
-  lua_getglobal(L, "package");
-  lua_getfield(L, -1, "loaded");
-  lua_pushvalue(L, -3);
-  lua_setfield(L, -2, name);
-  lua_pop(L, 2);
-  return 1;
-}
-#endif
-
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger);
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) {
   if (logger) {
@@ -1909,7 +2098,6 @@ void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) {
   }
 }
 
-#if TARGET_AVIUTL2_FILTER_PLUGIN || TARGET_AVIUTL2_SCRIPT_MODULE || TARGET_AVIUTL2_PLUGIN
 BOOL __declspec(dllexport) InitializePlugin(DWORD version);
 BOOL __declspec(dllexport) InitializePlugin(DWORD version) {
   if (version < 2002201) {
@@ -1951,50 +2139,7 @@ void __declspec(dllexport) UninitializePlugin(void);
 void __declspec(dllexport) UninitializePlugin(void) {
   // Cleanup is handled in finalize
 }
-#endif
 
-#if TARGET_AVIUTL2_FILTER_PLUGIN
-static bool dummy_proc_video(struct aviutl2_filter_proc_video *video) {
-  (void)video;
-  return true;
-}
-
-struct aviutl2_filter_plugin_table *__declspec(dllexport) GetFilterPluginTable(void);
-struct aviutl2_filter_plugin_table *__declspec(dllexport) GetFilterPluginTable(void) {
-  static void *items[] = {NULL};
-  static struct aviutl2_filter_plugin_table plugin_table = {
-      .flag = aviutl2_filter_plugin_table_flag_video,
-      .name = L"GCMZDrops",
-      .label = L"oov",
-      .information = NULL,
-      .items = items,
-      .func_proc_video = dummy_proc_video,
-  };
-  if (plugin_table.information == NULL) {
-    plugin_table.information = get_information();
-  }
-  return &plugin_table;
-}
-#endif
-
-#if TARGET_AVIUTL2_SCRIPT_MODULE
-struct aviutl2_script_module_table *__declspec(dllexport) GetScriptModuleTable(void);
-struct aviutl2_script_module_table *__declspec(dllexport) GetScriptModuleTable(void) {
-  static struct aviutl2_script_module_function functions[] = {
-      {0},
-  };
-  static struct aviutl2_script_module_table script_module_table = {
-      .information = NULL,
-      .functions = functions,
-  };
-  if (script_module_table.information == NULL) {
-    script_module_table.information = get_information();
-  }
-  return &script_module_table;
-}
-#endif
-
-#if TARGET_AVIUTL2_PLUGIN
 static void project_load_handler(struct aviutl2_project_file *project) {
   struct ov_error err = {0};
   bool success = false;
@@ -2027,7 +2172,6 @@ static int paste_from_clipboard_impl(void *userdata) {
   bool success = false;
 
   {
-    // Get right-click position
     void *window = NULL;
     int x = 0;
     int y = 0;
@@ -2035,8 +2179,6 @@ static int paste_from_clipboard_impl(void *userdata) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
-
-    // Get IDataObject from clipboard
     HRESULT hr = OleGetClipboard(&dataobj);
     if (FAILED(hr)) {
       OV_ERROR_SET_HRESULT(&err, hr);
@@ -2046,8 +2188,7 @@ static int paste_from_clipboard_impl(void *userdata) {
       OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "no data in clipboard");
       goto cleanup;
     }
-
-    if (!gcmz_drop_inject_dataobject(g_drop, window, dataobj, x, y, false, &err)) {
+    if (!gcmz_drop_simulate_drop(g_drop, window, dataobj, x, y, false, false, &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
@@ -2077,7 +2218,10 @@ static void paste_from_clipboard_handler(struct aviutl2_edit_section *edit) {
 
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host);
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
-  host->set_plugin_information(get_information());
+  static wchar_t information[64];
+  ov_snprintf_wchar(
+      information, sizeof(information) / sizeof(information[0]), L"%1$hs", L"GCMZDrops %1$s by oov", GCMZ_VERSION);
+  host->set_plugin_information(information);
   host->register_project_load_handler(project_load_handler);
   static wchar_t layer_menu_name[64];
   ov_snprintf_wchar(layer_menu_name,
@@ -2100,7 +2244,6 @@ void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
   cnd_signal(&g_init_cond);
   mtx_unlock(&g_init_mtx);
 }
-#endif
 
 static void error_output_hook(enum ov_error_severity severity, char const *str) {
   (void)severity;
@@ -2134,6 +2277,13 @@ BOOL WINAPI DllMain(HINSTANCE const inst, DWORD const reason, LPVOID const reser
     DisableThreadLibraryCalls(inst);
     ov_init();
     ov_error_set_output_hook(error_output_hook);
+
+    {
+      struct ov_error err = {0};
+      if (!gcmz_lua_create(&g_lua_ctx, &err)) {
+        OV_ERROR_REPORT(&err, NULL);
+      }
+    }
     return TRUE;
   case DLL_PROCESS_DETACH:
     ov_exit();

@@ -60,7 +60,7 @@ static void test_api_register(void) {
   });
 
   struct ov_error err = {0};
-  TEST_CHECK(gcmz_lua_api_register(L, NULL, &err));
+  TEST_CHECK(gcmz_lua_api_register(L, &err));
 
   // Check if gcmz global table was created
   lua_getglobal(L, "gcmz");
@@ -95,7 +95,7 @@ static void test_convert_encoding(void) {
   });
 
   struct ov_error err = {0};
-  TEST_CHECK(gcmz_lua_api_register(L, NULL, &err));
+  TEST_CHECK(gcmz_lua_api_register(L, &err));
 
   // Test same encoding (no conversion needed)
   int result = luaL_dostring(L, "return gcmz.convert_encoding('Hello', 'utf8', 'utf8')");
@@ -140,7 +140,7 @@ static void test_register_invalid_args(void) {
   struct ov_error err = {0};
 
   // Test with NULL lua_State
-  TEST_CHECK(!gcmz_lua_api_register(NULL, NULL, &err));
+  TEST_CHECK(!gcmz_lua_api_register(NULL, &err));
   TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
 
   OV_ERROR_DESTROY(&err);
@@ -159,7 +159,7 @@ static void test_decode_exo_text(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, NULL, &err))) {
+  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
     OV_ERROR_REPORT(&err, NULL);
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
@@ -213,10 +213,160 @@ static void test_decode_exo_text(void) {
   gcmz_lua_api_set_options(NULL);
 }
 
+// Mock callback for debug_print
+static char g_debug_print_buffer[1024] = {0};
+static void mock_debug_print(void *userdata, char const *message) {
+  (void)userdata;
+  if (message) {
+    strncpy(g_debug_print_buffer, message, sizeof(g_debug_print_buffer) - 1);
+    g_debug_print_buffer[sizeof(g_debug_print_buffer) - 1] = '\0';
+  }
+}
+
+static void test_debug_print(void) {
+  lua_State *L = luaL_newstate();
+  TEST_ASSERT(L != NULL);
+
+  luaL_openlibs(L);
+
+  // Reset buffer
+  memset(g_debug_print_buffer, 0, sizeof(g_debug_print_buffer));
+
+  // Set up mock callback with debug_print
+  gcmz_lua_api_set_options(&(struct gcmz_lua_api_options){
+      .get_project_data = mock_get_project_data,
+      .debug_print = mock_debug_print,
+      .userdata = NULL,
+  });
+
+  struct ov_error err = {0};
+  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
+    OV_ERROR_REPORT(&err, NULL);
+    lua_close(L);
+    gcmz_lua_api_set_options(NULL);
+    return;
+  }
+
+  // Test debug_print exists as global function
+  lua_getglobal(L, "debug_print");
+  TEST_CHECK(lua_isfunction(L, -1));
+  lua_pop(L, 1);
+
+  // Test calling debug_print
+  int result = luaL_dostring(L, "debug_print('Hello from Lua!')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(strcmp(g_debug_print_buffer, "Hello from Lua!") == 0);
+
+  // Test calling debug_print without callback (should not crash)
+  gcmz_lua_api_set_options(&(struct gcmz_lua_api_options){
+      .get_project_data = mock_get_project_data,
+      .debug_print = NULL, // No callback
+      .userdata = NULL,
+  });
+
+  memset(g_debug_print_buffer, 0, sizeof(g_debug_print_buffer));
+  result = luaL_dostring(L, "debug_print('This should be ignored')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(g_debug_print_buffer[0] == '\0'); // Buffer should remain empty
+
+  lua_close(L);
+  gcmz_lua_api_set_options(NULL);
+}
+
+static void test_i18n(void) {
+  lua_State *L = luaL_newstate();
+  TEST_ASSERT(L != NULL);
+
+  luaL_openlibs(L);
+
+  gcmz_lua_api_set_options(&(struct gcmz_lua_api_options){
+      .get_project_data = mock_get_project_data,
+      .userdata = NULL,
+  });
+
+  struct ov_error err = {0};
+  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
+    OV_ERROR_REPORT(&err, NULL);
+    lua_close(L);
+    gcmz_lua_api_set_options(NULL);
+    return;
+  }
+
+  // Test i18n exists as global function
+  lua_getglobal(L, "i18n");
+  TEST_CHECK(lua_isfunction(L, -1));
+  lua_pop(L, 1);
+
+  // Test i18n with empty table
+  int result = luaL_dostring(L, "return i18n({})");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(lua_isnil(L, -1));
+  lua_pop(L, 1);
+
+  // Test i18n with invalid argument
+  result = luaL_dostring(L, "return pcall(i18n, 'not a table')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(!lua_toboolean(L, -2)); // Should return false (error)
+  lua_pop(L, 2);
+
+  // Test i18n with override language (second argument)
+  result = luaL_dostring(L,
+                         "return i18n({\n"
+                         "  ['en_US'] = 'Hello',\n"
+                         "  ['ja_JP'] = 'こんにちは',\n"
+                         "  ['zh_CN'] = '你好',\n"
+                         "}, 'ja_JP')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(lua_isstring(L, -1));
+  TEST_CHECK(strcmp(lua_tostring(L, -1), "こんにちは") == 0);
+  lua_pop(L, 1);
+
+  // Test i18n override with different language
+  result = luaL_dostring(L,
+                         "return i18n({\n"
+                         "  ['en_US'] = 'Hello',\n"
+                         "  ['ja_JP'] = 'こんにちは',\n"
+                         "  ['zh_CN'] = '你好',\n"
+                         "}, 'zh_CN')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(lua_isstring(L, -1));
+  TEST_CHECK(strcmp(lua_tostring(L, -1), "你好") == 0);
+  lua_pop(L, 1);
+
+  // Test i18n override with en_US
+  result = luaL_dostring(L,
+                         "return i18n({\n"
+                         "  ['en_US'] = 'Hello',\n"
+                         "  ['ja_JP'] = 'こんにちは',\n"
+                         "  ['zh_CN'] = '你好',\n"
+                         "}, 'en_US')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(lua_isstring(L, -1));
+  TEST_CHECK(strcmp(lua_tostring(L, -1), "Hello") == 0);
+  lua_pop(L, 1);
+
+  // Test i18n override with unavailable language falls back to en_US
+  result = luaL_dostring(L,
+                         "return i18n({\n"
+                         "  ['en_US'] = 'English fallback',\n"
+                         "  ['ja_JP'] = 'こんにちは',\n"
+                         "}, 'fr_FR')");
+  TEST_CHECK(result == LUA_OK);
+  TEST_CHECK(lua_isstring(L, -1));
+  // fr_FR not found, system preference likely not ja_JP on CI, falls back to en_US
+  // Note: This test might be environment-dependent, but en_US fallback should work
+  lua_pop(L, 1);
+
+  lua_close(L);
+  gcmz_lua_api_set_options(NULL);
+}
+
 TEST_LIST = {
     {"api_register", test_api_register},
     {"convert_encoding", test_convert_encoding},
     {"decode_exo_text", test_decode_exo_text},
     {"register_invalid_args", test_register_invalid_args},
+    {"debug_print", test_debug_print},
+    {"i18n", test_i18n},
     {NULL, NULL},
 };

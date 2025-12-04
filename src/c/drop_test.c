@@ -13,6 +13,7 @@
 #include <ovprintf.h>
 
 #include "drop.h"
+#include "lua.h"
 
 struct test_drop_target {
   IDropTarget vtbl;
@@ -115,7 +116,7 @@ static void test_drop_null_safety(void) {
   struct ov_error err = {0};
   gcmz_drop_destroy(NULL);
 
-  TEST_CHECK(!gcmz_drop_simulate_drop(NULL, NULL, 0, 0, true, NULL, &err));
+  TEST_CHECK(!gcmz_drop_create_file_list_dataobj(NULL, 0, 0, &err));
   TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
   OV_ERROR_DESTROY(&err);
 }
@@ -123,11 +124,17 @@ static void test_drop_null_safety(void) {
 // Test real COM integration
 static void test_drop_real_com_integration(void) {
   struct gcmz_drop *d = NULL;
+  struct gcmz_lua_context *lua_ctx = NULL;
   struct ov_error err = {0};
   HWND real_window = NULL;
   struct test_drop_target *test_target = NULL;
 
   TEST_ASSERT(SUCCEEDED(OleInitialize(NULL)));
+
+  // Create Lua context for testing
+  if (!TEST_CHECK(gcmz_lua_create(&lua_ctx, &err))) {
+    goto cleanup;
+  }
 
   real_window = CreateWindowExW(0,
                                 L"STATIC",
@@ -154,7 +161,7 @@ static void test_drop_real_com_integration(void) {
     goto cleanup;
   }
 
-  d = gcmz_drop_create(mock_dataobj_extract, mock_cleanup_temp_files, NULL, NULL, NULL, &err);
+  d = gcmz_drop_create(mock_dataobj_extract, mock_cleanup_temp_files, NULL, NULL, lua_ctx, &err);
   if (!TEST_CHECK(d != NULL)) {
     OV_ERROR_DESTROY(&err);
     goto cleanup;
@@ -171,6 +178,9 @@ cleanup:
   }
   if (d) {
     gcmz_drop_destroy(&d);
+  }
+  if (lua_ctx) {
+    gcmz_lua_destroy(&lua_ctx);
   }
   if (test_target) {
     IDropTarget_Release((IDropTarget *)test_target);

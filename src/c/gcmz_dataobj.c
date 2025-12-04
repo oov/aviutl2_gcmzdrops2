@@ -26,6 +26,7 @@ struct gcmz_api_props_vtbl {
 
   // Custom methods
   HRESULT(STDMETHODCALLTYPE *IsConvertExoEnabled)(struct i_gcmz_api_props *This, bool *enabled);
+  HRESULT(STDMETHODCALLTYPE *IsFromExternalApi)(struct i_gcmz_api_props *This, bool *from_external);
 };
 
 // IDataObject implementation that also implements gcmz_api_props
@@ -35,6 +36,7 @@ struct gcmz_dataobj {
   IDataObject *orig;             ///< Wrapped IDataObject
   LONG ref_count;                ///< Shared reference count
   bool use_exo_converter;        ///< EXO conversion flag
+  bool from_external_api;        ///< Whether drop originated from external API
 };
 
 static inline struct gcmz_dataobj *get_impl_from_dataobj(IDataObject *const This) {
@@ -175,9 +177,22 @@ static HRESULT STDMETHODCALLTYPE i_gcmz_api_props_is_convert_exo_enabled(struct 
   return S_OK;
 }
 
+static HRESULT STDMETHODCALLTYPE i_gcmz_api_props_is_from_external_api(struct i_gcmz_api_props *const This,
+                                                                       bool *const from_external) {
+  if (!from_external) {
+    return E_POINTER;
+  }
+  struct gcmz_dataobj const *const impl = GET_IMPL(This);
+  *from_external = impl->from_external_api;
+  return S_OK;
+}
+
 // Public API
 
-NODISCARD void *gcmz_dataobj_create(void *const dataobj, bool const use_exo_converter, struct ov_error *const err) {
+NODISCARD void *gcmz_dataobj_create(void *const dataobj,
+                                    bool const use_exo_converter,
+                                    bool const from_external_api,
+                                    struct ov_error *const err) {
   if (!dataobj) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return NULL;
@@ -202,6 +217,7 @@ NODISCARD void *gcmz_dataobj_create(void *const dataobj, bool const use_exo_conv
       .AddRef = i_gcmz_api_props_add_ref,
       .Release = i_gcmz_api_props_release,
       .IsConvertExoEnabled = i_gcmz_api_props_is_convert_exo_enabled,
+      .IsFromExternalApi = i_gcmz_api_props_is_from_external_api,
   };
 
   struct gcmz_dataobj *impl = NULL;
@@ -218,6 +234,7 @@ NODISCARD void *gcmz_dataobj_create(void *const dataobj, bool const use_exo_conv
       .orig = (IDataObject *)dataobj,
       .ref_count = 1,
       .use_exo_converter = use_exo_converter,
+      .from_external_api = from_external_api,
   };
   IDataObject_AddRef(impl->orig);
 
@@ -248,4 +265,23 @@ bool gcmz_dataobj_is_exo_convert_enabled(void *const dataobj) {
   }
 
   return enabled;
+}
+
+bool gcmz_dataobj_is_from_external_api(void *const dataobj) {
+  if (!dataobj) {
+    return false;
+  }
+  struct i_gcmz_api_props *props = NULL;
+  HRESULT hr = IDataObject_QueryInterface((IDataObject *)dataobj, &iid_gcmz_api_props, (void **)&props);
+  if (FAILED(hr) || !props) {
+    return false;
+  }
+  bool from_external = false;
+  hr = props->lpVtbl->IsFromExternalApi(props, &from_external);
+  props->lpVtbl->Release(props);
+  if (FAILED(hr)) {
+    return false;
+  }
+
+  return from_external;
 }

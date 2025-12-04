@@ -60,16 +60,25 @@ struct gcmz_lua_options {
 };
 
 /**
- * @brief Create and initialize Lua context with standard libraries and plugin loading
+ * @brief Create and initialize Lua context with standard libraries
  *
  * @param ctx [out] Pointer to store the created context
- * @param options Options for Lua context creation (can be NULL for default options)
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
-NODISCARD bool gcmz_lua_create(struct gcmz_lua_context **const ctx,
-                               struct gcmz_lua_options const *const options,
-                               struct ov_error *const err);
+NODISCARD bool gcmz_lua_create(struct gcmz_lua_context **const ctx, struct ov_error *const err);
+
+/**
+ * @brief Setup Lua context with additional options
+ *
+ * @param ctx Lua context instance
+ * @param options Options for Lua context setup
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+NODISCARD bool gcmz_lua_setup(struct gcmz_lua_context *const ctx,
+                              struct gcmz_lua_options const *const options,
+                              struct ov_error *const err);
 
 /**
  * @brief Cleanup and destroy Lua context, freeing all resources
@@ -93,31 +102,18 @@ struct lua_State *gcmz_lua_get_state(struct gcmz_lua_context const *const ctx);
  *
  * @param ctx Lua context instance
  * @param file_list File list from drop operation (will be modified in-place if modules return new files)
- * @param x Mouse X coordinate
- * @param y Mouse Y coordinate
  * @param key_state Keyboard and mouse button state flags
+ * @param modifier_keys Additional modifier keys (gcmz_modifier_key_flags)
+ * @param from_external_api Whether this drop originated from external API
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
 NODISCARD bool gcmz_lua_call_drag_enter(struct gcmz_lua_context const *const ctx,
                                         struct gcmz_file_list *const file_list,
-                                        int x,
-                                        int y,
                                         uint32_t key_state,
+                                        uint32_t modifier_keys,
+                                        bool from_external_api,
                                         struct ov_error *const err);
-
-/**
- * @brief Call drag_over hook on all loaded modules in priority order
- *
- * @param ctx Lua context instance
- * @param x Mouse X coordinate
- * @param y Mouse Y coordinate
- * @param key_state Keyboard and mouse button state flags
- * @param err [out] Error information on failure
- * @return true on success, false on failure
- */
-NODISCARD bool gcmz_lua_call_drag_over(
-    struct gcmz_lua_context const *const ctx, int x, int y, uint32_t key_state, struct ov_error *const err);
 
 /**
  * @brief Call drag_leave hook on all loaded modules in priority order
@@ -135,17 +131,17 @@ NODISCARD bool gcmz_lua_call_drag_leave(struct gcmz_lua_context const *const ctx
  *
  * @param ctx Lua context instance
  * @param file_list File list from drop operation (will be modified in-place if modules return new files)
- * @param x Mouse X coordinate
- * @param y Mouse Y coordinate
  * @param key_state Keyboard and mouse button state flags
+ * @param modifier_keys Additional modifier keys (gcmz_modifier_key_flags)
+ * @param from_external_api Whether this drop originated from external API
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
 NODISCARD bool gcmz_lua_call_drop(struct gcmz_lua_context const *const ctx,
                                   struct gcmz_file_list *const file_list,
-                                  int x,
-                                  int y,
                                   uint32_t key_state,
+                                  uint32_t modifier_keys,
+                                  bool from_external_api,
                                   struct ov_error *const err);
 
 /**
@@ -162,3 +158,43 @@ NODISCARD bool gcmz_lua_call_drop(struct gcmz_lua_context const *const ctx,
 NODISCARD bool gcmz_lua_call_exo_convert(struct gcmz_lua_context const *const ctx,
                                          struct gcmz_file_list *const file_list,
                                          struct ov_error *const err);
+
+/**
+ * @brief Add a handler script from a Lua script string
+ *
+ * Loads and registers a handler module from a Lua script string.
+ * The script should return a table with handler functions (drag_enter, drag_leave, drop)
+ * and optionally a priority value.
+ *
+ * This function can be called anytime after gcmz_lua_create, including before full initialization.
+ *
+ * @param ctx Lua context instance
+ * @param name Module name for identification (UTF-8)
+ * @param script Lua script string (UTF-8) that returns a module table
+ * @param script_len Length of the script in bytes
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+NODISCARD bool gcmz_lua_add_handler_script(struct gcmz_lua_context *const ctx,
+                                           char const *const name,
+                                           char const *const script,
+                                           size_t const script_len,
+                                           struct ov_error *const err);
+
+/**
+ * @brief Add a handler script from a Lua script file
+ *
+ * Loads and registers a handler module from a Lua script file.
+ * The script should return a table with handler functions (drag_enter, drag_leave, drop)
+ * and optionally a priority value.
+ *
+ * This function can be called anytime after gcmz_lua_create, including before full initialization.
+ *
+ * @param ctx Lua context instance
+ * @param filepath Path to the Lua script file (native character encoding)
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+NODISCARD bool gcmz_lua_add_handler_script_file(struct gcmz_lua_context *const ctx,
+                                                NATIVE_CHAR const *const filepath,
+                                                struct ov_error *const err);

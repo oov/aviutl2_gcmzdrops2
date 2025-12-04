@@ -90,22 +90,137 @@ if [ "${INSTALL_TOOLS}" -eq 1 ]; then
   esac
 fi
 
+# Run command with progress indicator (prints . every second)
+run_with_progress() {
+  local message="$1"
+  local log_file="$2"
+  shift 2
+  printf "%s" "${message}"
+  local start_time=$(date +%s.%N)
+  "$@" > "${log_file}" 2>&1 &
+  local pid=$!
+  while kill -0 "${pid}" 2>/dev/null; do
+    sleep 1
+    printf "."
+  done
+  local end_time=$(date +%s.%N)
+  local elapsed=$(awk "BEGIN {printf \"%.3f\", ${end_time} - ${start_time}}")
+  wait "${pid}"
+  local exit_code=$?
+  if [ ${exit_code} -eq 0 ]; then
+    echo " done (${elapsed}s)"
+  fi
+  return ${exit_code}
+}
+
+# Extract and display relevant error information from build log
+show_error_log() {
+  local log_file="$1"
+  local error_block
+  error_block=$(awk '
+    /^FAILED:/ { printing=1; next }
+    /^\[[0-9]+\/[0-9]+\]/ { printing=0 }
+    /^ninja: build stopped/ { printing=0 }
+    printing && /\.(exe|clang|gcc) / { next }
+    printing { print }
+  ' "${log_file}" 2>/dev/null | head -n 50)
+
+  if [ -n "${error_block}" ]; then
+    echo "${error_block}"
+  else
+    tail -n 30 "${log_file}"
+  fi
+  echo ""
+  echo "(Full log: ${log_file})"
+}
+
+# Extract and display relevant test failure information from JUnit XML
+show_test_log() {
+  local log_file="$1"
+  local xml_file="$(dirname "${log_file}")/testlog.xml"
+
+  if [ -f "${xml_file}" ]; then
+    awk '
+      /<testsuite/,/>/ {
+        if (/tests="/) { match($0, /tests="([0-9]+)"/, t); tests = t[1] }
+        if (/failures="/) { match($0, /failures="([0-9]+)"/, f); failures = f[1] }
+      }
+      /<testcase / {
+        match($0, /name="([^"]*)"/, arr)
+        testname = arr[1]
+        has_failure = 0
+        system_out = ""
+      }
+      /<failure/ { has_failure = 1 }
+      /<system-out>/ {
+        in_system_out = 1
+        gsub(/.*<system-out>/, "")
+      }
+      in_system_out {
+        if (/<\/system-out>/) {
+          gsub(/<\/system-out>.*/, "")
+          system_out = system_out $0
+          in_system_out = 0
+        } else {
+          system_out = system_out $0 "\n"
+        }
+      }
+      /<\/testcase>/ {
+        if (has_failure) {
+          print "=== " testname " ==="
+          print system_out
+        }
+      }
+      END {
+        if (failures > 0) {
+          printf "%d/%d tests failed\n", failures, tests
+        }
+      }
+    ' "${xml_file}"
+    echo ""
+    echo "(Full log: ${log_file})"
+  else
+    tail -n 30 "${log_file}"
+    echo ""
+    echo "(Full log: ${log_file})"
+  fi
+}
+
 # Skip normal build process if only sign-ini or installer is requested
 if [ "${SIGN_INI}" -eq 0 ] && [ "${CREATE_INSTALLER}" -eq 0 ] || [ "${CREATE_ZIP}" -eq 1 ]; then
   for arch in $ARCHS; do
     builddir="${PWD}/build/${CMAKE_BUILD_TYPE}/${arch}"
+    build_log="${builddir}/build.log"
+    test_log="${builddir}/test.log"
+
     if [ "${REBUILD}" -eq 1 ] || [ ! -e "${builddir}/CMakeCache.txt" ]; then
       rm -rf "${builddir}"
       cmake -S . -B "${builddir}" --preset debug \
         -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
         -DCMAKE_TOOLCHAIN_FILE="src/c/3rd/ovbase/cmake/llvm-mingw.cmake" \
         -DCMAKE_C_COMPILER="${arch}-w64-mingw32-clang" \
-        -DUSE_ADDRESS_SANITIZER="${USE_ADDRESS_SANITIZER}"
+        -DUSE_ADDRESS_SANITIZER="${USE_ADDRESS_SANITIZER}" > /dev/null 2>&1
     fi
-    cmake --build "${builddir}"
+
+    # Build with output captured
+    if ! run_with_progress "Building ${arch}" "${build_log}" cmake --build "${builddir}"; then
+      echo ""
+      echo "Build failed for ${arch}:"
+      show_error_log "${build_log}"
+      exit 1
+    fi
+
+    # Run tests with output captured
     if [ "${SKIP_TESTS}" -eq 0 ]; then
-      ctest --test-dir "${builddir}" --output-on-failure --output-junit testlog.xml
+      if ! run_with_progress "Testing ${arch}" "${test_log}" ctest --test-dir "${builddir}" --output-on-failure --output-junit testlog.xml; then
+        echo ""
+        echo "Tests failed for ${arch}:"
+        show_test_log "${test_log}"
+        exit 1
+      fi
     fi
+
+    echo "Build successful for ${arch}."
   done
 fi
 

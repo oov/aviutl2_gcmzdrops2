@@ -82,10 +82,12 @@ static void test_init(void) {
   gcmz_lua_api_set_options(&(struct gcmz_lua_api_options){
       .get_project_data = mock_get_project_data,
       .temp_file_provider = mock_create_temp_file,
+      .aviutl2_ver = 0x02000001,
+      .gcmz_ver = 0x02000001,
   });
 
   struct ov_error err = {0};
-  if (!gcmz_lua_api_register(g_L, NULL, &err)) {
+  if (!gcmz_lua_api_register(g_L, &err)) {
     OV_ERROR_REPORT(&err, NULL);
     lua_close(g_L);
     g_L = NULL;

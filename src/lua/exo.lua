@@ -294,10 +294,13 @@ local function process_exo_file_entry(file)
     return
   end
 
-  if not gcmz.read_file then
+  -- Read file content
+  local f = io.open(filepath, "rb")
+  if not f then
     return
   end
-  local content = gcmz.read_file(filepath)
+  local content = f:read("*a")
+  f:close()
   if not content then
     return
   end
@@ -321,11 +324,14 @@ local function process_exo_file_entry(file)
   end
 
   -- Write content to temp file
-  if not gcmz.write_file then
+  local out = io.open(temp_path, "wb")
+  if not out then
     return
   end
+  local ok = out:write(object_content)
+  out:close()
 
-  if gcmz.write_file(temp_path, object_content) then
+  if ok then
     -- Update file entry
     file.filepath = temp_path
     file.mimetype = "application/aviutl-object"

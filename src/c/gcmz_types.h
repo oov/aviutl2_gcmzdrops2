@@ -10,6 +10,17 @@ enum {
 };
 
 /**
+ * @brief Additional modifier key flags
+ *
+ * These flags are used to track modifier keys not available in standard
+ * Windows drag-and-drop key state (MK_* flags).
+ */
+enum gcmz_modifier_key_flags {
+  gcmz_modifier_alt = 0x1, ///< Alt key is pressed
+  gcmz_modifier_win = 0x2, ///< Windows key (either left or right) is pressed
+};
+
+/**
  * @brief File processing mode for file management
  */
 enum gcmz_processing_mode {

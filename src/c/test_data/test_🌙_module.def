@@ -1,0 +1,2 @@
+EXPORTS
+    luaopen_test_🌙 = luaopen_test_lua_module

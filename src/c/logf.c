@@ -1,5 +1,6 @@
 #include "logf.h"
 
+#include <assert.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -160,10 +161,11 @@ static void log_core(enum log_level const level,
   bool has_error_string = false;
 
   if (err) {
-    if (ov_error_to_string(err, &err_str, true, &err2)) {
-      has_error_string = true;
-    } else {
+    if (!ov_error_to_string(err, &err_str, true, &err2)) {
+      assert(err2.stack[0].info.type != ov_error_type_invalid);
       OV_ERROR_REPORT(&err2, NULL);
+    } else {
+      has_error_string = true;
     }
   }
 
