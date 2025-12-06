@@ -1,26 +1,27 @@
--- EXO to Object converter module
--- Converts AviUtl1 .exo files (Shift_JIS) to AviUtl2 .object files (UTF-8)
+--- EXO to Object converter module.
+-- Converts AviUtl1 .exo files (Shift_JIS) to AviUtl ExEdit2 .object files (UTF-8).
 --
 -- NOTE: This module does NOT implement drag_enter/drop hooks.
--- It is called explicitly from C code via gcmz_lua_call_exo_convert()
--- only when the use_exo_converter flag is enabled.
+-- It is called explicitly from C code only when the use_exo_converter flag is enabled.
+-- @module exo
 local ini = require("ini")
 
 local M = {}
 
---------------------------------------------------------------------------------
--- Effect Conversion Tables
---------------------------------------------------------------------------------
-
--- Each effect table has:
---   name: output effect name (if different from input)
---   props: property mapping table { exo_key = { key = "object_key", default = value } }
---   defaults: properties to add with default values if not present in source
---   transform: optional function(props, exo_props) to do custom transformation
+--- Effect conversion tables.
+-- Each effect table defines how to convert AviUtl1 effects to AviUtl2 format.
+-- Table structure:
+--   - name: output effect name (if different from input)
+--   - props: property mapping table { exo_key = { key = "object_key", default = value } }
+--   - defaults: properties to add with default values if not present in source
+--   - transform: optional function(props, exo_props) to do custom transformation
+-- @local
 
 local effect_tables = {}
 
--- 音声ファイル
+--- Audio file effect conversion table.
+-- Converts 音声ファイル effect from AviUtl1 to AviUtl2 format.
+-- @local
 effect_tables["音声ファイル"] = {
   props = {
     ["再生位置"] = { key = "再生位置", decimals = 3 },
@@ -33,7 +34,9 @@ effect_tables["音声ファイル"] = {
   },
 }
 
--- 標準再生 → 音声再生
+--- Standard playback to audio playback conversion.
+-- Converts 標準再生 effect to 音声再生 effect.
+-- @local
 effect_tables["標準再生"] = {
   name = "音声再生",
   props = {
@@ -42,7 +45,9 @@ effect_tables["標準再生"] = {
   },
 }
 
--- テキスト
+--- Text effect conversion table.
+-- Converts テキスト effect with comprehensive property mapping.
+-- @local
 effect_tables["テキスト"] = {
   props = {
     ["サイズ"] = { key = "サイズ", decimals = 2 },
@@ -79,7 +84,9 @@ effect_tables["テキスト"] = {
   },
 }
 
--- 画像ファイル
+--- Image file effect conversion table.
+-- Converts 画像ファイル effect for image file handling.
+-- @local
 effect_tables["画像ファイル"] = {
   props = {
     ["file"] = { key = "ファイル" },
@@ -90,7 +97,10 @@ effect_tables["画像ファイル"] = {
   },
 }
 
--- 標準描画
+--- Standard drawing effect conversion table.
+-- Converts 標準描画 effect with position, scale, and transparency properties.
+-- Includes custom transformation for blend modes and rotation.
+-- @local
 effect_tables["標準描画"] = {
   props = {
     ["X"] = { key = "X", decimals = 2 },
@@ -115,6 +125,11 @@ effect_tables["標準描画"] = {
     ["透明度"] = "0.00",
     ["合成モード"] = "通常",
   },
+  --- Custom transformation function for standard drawing effect.
+  -- Converts blend mode values and rotation values to AviUtl2 format.
+  -- @param out_props table Output properties table to modify
+  -- @param exo_props table Input EXO properties table
+  -- @local
   transform = function(out_props, exo_props)
     -- blend value to 合成モード
     local blend = exo_props["blend"]
@@ -139,11 +154,12 @@ effect_tables["標準描画"] = {
   end,
 }
 
---------------------------------------------------------------------------------
--- Helper Functions
---------------------------------------------------------------------------------
-
--- Format number with specified decimal places
+--- Format number with specified decimal places.
+-- Converts a numeric value to a string with the specified number of decimal places.
+-- @param value string|number The value to format
+-- @param decimals number Number of decimal places
+-- @return string|nil Formatted number string, or original value if not numeric, or nil if input is nil
+-- @local
 local function format_number(value, decimals)
   if not value then
     return nil
@@ -155,11 +171,12 @@ local function format_number(value, decimals)
   return string.format("%." .. decimals .. "f", num)
 end
 
---------------------------------------------------------------------------------
--- Conversion Logic
---------------------------------------------------------------------------------
-
--- Convert a single effect section
+--- Convert a single effect section.
+-- Processes one effect section from the EXO file and converts it to AviUtl2 format.
+-- @param exo table The parsed EXO file as an INI object
+-- @param section_name string The name of the effect section to convert
+-- @return string|nil, table|nil Effect name and properties table, or nil if conversion fails
+-- @local
 local function convert_effect(exo, section_name)
   local effect_name = exo:get(section_name, "_name")
   if not effect_name then
@@ -197,19 +214,25 @@ local function convert_effect(exo, section_name)
     end
   end
 
-  -- Apply custom transform function
-  local exo_props = {}
-  for _, key in ipairs(exo:keys(section_name)) do
-    exo_props[key] = exo:get(section_name, key)
-  end
+  -- Apply custom transform function (only build exo_props if needed)
   if table_def.transform then
+    local exo_props = {}
+    for _, key in ipairs(exo:keys(section_name)) do
+      exo_props[key] = exo:get(section_name, key)
+    end
     table_def.transform(out_props, exo_props)
   end
 
   return out_name, out_props
 end
 
--- Convert EXO content to object format
+--- Convert EXO content to object format.
+-- Takes the raw content of an EXO file and converts it to AviUtl2 object format.
+-- Handles encoding conversion, INI parsing, and effect conversion.
+-- @param exo_content string Raw EXO file content in Shift_JIS encoding
+-- @return string Converted object file content in UTF-8
+-- @raise error if encoding conversion, parsing, or effect conversion fails
+-- @local
 local function convert_exo_to_object(exo_content)
   -- Convert from Shift_JIS to UTF-8
   local utf8_content = gcmz.convert_encoding(exo_content, "sjis", "utf8")
@@ -224,7 +247,7 @@ local function convert_exo_to_object(exo_content)
   end
 
   -- Output INI
-  local out = ini.new("")
+  local out = ini.new()
   local obj_idx = 0
 
   while true do
@@ -281,10 +304,11 @@ local function convert_exo_to_object(exo_content)
   return tostring(out)
 end
 
---------------------------------------------------------------------------------
--- Module Interface
---------------------------------------------------------------------------------
-
+--- Process a single EXO file entry and convert it to object format.
+-- Converts an EXO file to a temporary object file if the file has .exo extension.
+-- The file entry is modified in-place with the new temporary file path.
+-- @param file table File entry with filepath, mimetype, and other properties
+-- @local
 local function process_exo_file_entry(file)
   local filepath = file.filepath
   if not filepath then
@@ -339,9 +363,12 @@ local function process_exo_file_entry(file)
   end
 end
 
--- Process file list and convert EXO files to object files
--- @param files List of files { {filepath="...", mimetype="..."}, ... }
--- @return Modified file list (in-place modification is also fine)
+--- Process file list and convert EXO files to object files.
+-- Iterates through a list of files and converts any EXO files to temporary object files.
+-- The original file entries are modified in-place to point to the converted files.
+-- @param files table List of files with format { {filepath="...", mimetype="..."}, ... }
+-- @return table The same file list (modified in-place, but returned for convenience)
+-- @usage local converted_files = exo.process_file_list(files)
 function M.process_file_list(files)
   for i, file in ipairs(files) do
     process_exo_file_entry(file)
