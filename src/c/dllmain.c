@@ -2237,7 +2237,7 @@ void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) {
 
 BOOL __declspec(dllexport) InitializePlugin(DWORD version);
 BOOL __declspec(dllexport) InitializePlugin(DWORD version) {
-  if (version < 2002201) {
+  if (version < 2002300) {
     struct ov_error err = {0};
     wchar_t title[128];
     wchar_t main_instruction[128];
@@ -2247,7 +2247,7 @@ BOOL __declspec(dllexport) InitializePlugin(DWORD version) {
                   ov_error_generic_fail,
                   "%1$s",
                   gettext("GCMZDrops requires AviUtl ExEdit2 %1$s or later."),
-                  "version2.0beta22a");
+                  "version2.0beta23");
     ov_snprintf_wchar(title, sizeof(title) / sizeof(title[0]), L"%s", L"%s", gettext("GCMZDrops"));
     ov_snprintf_wchar(main_instruction,
                       sizeof(main_instruction) / sizeof(main_instruction[0]),
