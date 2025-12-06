@@ -2302,7 +2302,7 @@ cleanup:
   }
 }
 
-static int paste_from_clipboard_impl(void *userdata) {
+static void paste_from_clipboard_impl(void *userdata) {
   (void)userdata;
   struct ov_error err = {0};
   IDataObject *dataobj = NULL;
@@ -2341,16 +2341,11 @@ cleanup:
     IDataObject_Release(dataobj);
     dataobj = NULL;
   }
-  return 0;
 }
 
 static void paste_from_clipboard_handler(struct aviutl2_edit_section *edit) {
   (void)edit;
-  thrd_t thread;
-  if (thrd_create(&thread, paste_from_clipboard_impl, NULL) == thrd_success) {
-    thrd_detach(thread);
-    return;
-  }
+  gcmz_do_sub(paste_from_clipboard_impl, NULL);
 }
 
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host);
