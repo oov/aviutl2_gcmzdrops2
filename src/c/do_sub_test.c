@@ -6,34 +6,47 @@
 
 #include "do_sub.h"
 
-static void test_init_with_null_error(void) {
-  TEST_CHECK(gcmz_do_sub_init(NULL));
+static void test_create_with_null_error(void) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(NULL);
+  TEST_CHECK(ctx != NULL);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
+  TEST_CHECK(ctx == NULL);
 }
 
-static void test_init_success(void) {
+static void test_create_success(void) {
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
+    return;
   }
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
+  TEST_CHECK(ctx == NULL);
 }
 
-static void test_double_init(void) {
+static void test_double_create(void) {
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx1 = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx1 != NULL)) {
     OV_ERROR_DESTROY(&err);
+    return;
   }
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx2 = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx2 != NULL)) {
     OV_ERROR_DESTROY(&err);
+    gcmz_do_sub_destroy(&ctx1);
+    return;
   }
 
-  gcmz_do_sub_exit();
+  TEST_CHECK(ctx1 != ctx2);
+
+  gcmz_do_sub_destroy(&ctx1);
+  gcmz_do_sub_destroy(&ctx2);
 }
 
 static mtx_t g_test_mutex;
@@ -52,13 +65,14 @@ static void test_async_task(void) {
   mtx_init(&g_test_mutex, mtx_plain);
   g_counter = 0;
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     mtx_destroy(&g_test_mutex);
     return;
   }
 
-  gcmz_do_sub(increment_counter, NULL);
+  gcmz_do_sub_do(ctx, increment_counter, NULL);
 
   thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100000000}, NULL);
 
@@ -68,7 +82,7 @@ static void test_async_task(void) {
 
   TEST_CHECK(count == 1);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
   mtx_destroy(&g_test_mutex);
 }
 
@@ -78,13 +92,14 @@ static void test_blocking_task(void) {
   mtx_init(&g_test_mutex, mtx_plain);
   g_counter = 0;
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     mtx_destroy(&g_test_mutex);
     return;
   }
 
-  gcmz_do_sub_blocking(increment_counter, NULL);
+  gcmz_do_sub_do_blocking(ctx, increment_counter, NULL);
 
   mtx_lock(&g_test_mutex);
   int count = g_counter;
@@ -92,7 +107,7 @@ static void test_blocking_task(void) {
 
   TEST_CHECK(count == 1);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
   mtx_destroy(&g_test_mutex);
 }
 
@@ -102,15 +117,16 @@ static void test_sequential_tasks(void) {
   mtx_init(&g_test_mutex, mtx_plain);
   g_counter = 0;
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     mtx_destroy(&g_test_mutex);
     return;
   }
 
-  gcmz_do_sub_blocking(increment_counter, NULL);
-  gcmz_do_sub_blocking(increment_counter, NULL);
-  gcmz_do_sub_blocking(increment_counter, NULL);
+  gcmz_do_sub_do_blocking(ctx, increment_counter, NULL);
+  gcmz_do_sub_do_blocking(ctx, increment_counter, NULL);
+  gcmz_do_sub_do_blocking(ctx, increment_counter, NULL);
 
   mtx_lock(&g_test_mutex);
   int count = g_counter;
@@ -118,7 +134,7 @@ static void test_sequential_tasks(void) {
 
   TEST_CHECK(count == 3);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
   mtx_destroy(&g_test_mutex);
 }
 
@@ -133,16 +149,17 @@ static void test_shutdown_while_running(void) {
 
   int task_completed = 0;
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     return;
   }
 
-  gcmz_do_sub(sleep_task, &task_completed);
+  gcmz_do_sub_do(ctx, sleep_task, &task_completed);
 
   thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 50000000}, NULL);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
 
   TEST_CHECK(task_completed == 1);
 }
@@ -150,16 +167,18 @@ static void test_shutdown_while_running(void) {
 static void test_shutdown_while_idle(void) {
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  struct gcmz_do_sub *ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     return;
   }
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&ctx);
 
   TEST_CHECK(1);
 }
 
+static struct gcmz_do_sub *g_parallel_ctx = NULL;
 static _Atomic int g_atomic_counter = 0;
 
 static void atomic_increment_task(void *data) {
@@ -176,7 +195,7 @@ struct thread_context {
 
 static int parallel_caller_thread(void *arg) {
   struct thread_context *ctx = (struct thread_context *)arg;
-  gcmz_do_sub_blocking(atomic_increment_task, &ctx->iterations);
+  gcmz_do_sub_do_blocking(g_parallel_ctx, atomic_increment_task, &ctx->iterations);
   return 0;
 }
 
@@ -189,7 +208,8 @@ static void test_parallel_execution(void) {
 
   atomic_store(&g_atomic_counter, 0);
 
-  if (!TEST_CHECK(gcmz_do_sub_init(&err))) {
+  g_parallel_ctx = gcmz_do_sub_create(&err);
+  if (!TEST_CHECK(g_parallel_ctx != NULL)) {
     OV_ERROR_DESTROY(&err);
     return;
   }
@@ -212,13 +232,13 @@ static void test_parallel_execution(void) {
   TEST_CHECK(final_count == expected_total);
   TEST_MSG("Expected %d, got %d", expected_total, final_count);
 
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&g_parallel_ctx);
 }
 
 TEST_LIST = {
-    {"test_init_with_null_error", test_init_with_null_error},
-    {"test_init_success", test_init_success},
-    {"test_double_init", test_double_init},
+    {"test_create_with_null_error", test_create_with_null_error},
+    {"test_create_success", test_create_success},
+    {"test_double_create", test_double_create},
     {"test_async_task", test_async_task},
     {"test_blocking_task", test_blocking_task},
     {"test_sequential_tasks", test_sequential_tasks},

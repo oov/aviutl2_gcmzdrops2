@@ -80,6 +80,7 @@ static struct gcmz_lua_context *g_lua_ctx = NULL;
 static struct gcmz_tray *g_tray = NULL;
 static struct gcmz_analyze *g_capture = NULL;
 static struct gcmz_window_list *g_window_list = NULL;
+static struct gcmz_do_sub *g_do_sub = NULL;
 
 static struct aviutl2_log_handle *g_logger = NULL;
 static struct aviutl2_edit_handle *g_edit = NULL;
@@ -1814,7 +1815,7 @@ static void finalize(void *const userdata) {
   }
   gcmz_delayed_cleanup_exit();
   gcmz_temp_remove_directory();
-  gcmz_do_sub_exit();
+  gcmz_do_sub_destroy(&g_do_sub);
   gcmz_do_exit();
   gcmz_aviutl2_cleanup();
   if (g_mo) {
@@ -2068,7 +2069,8 @@ static bool initialize(struct ov_error *const err) {
     goto cleanup;
   }
 
-  if (!gcmz_do_sub_init(err)) {
+  g_do_sub = gcmz_do_sub_create(err);
+  if (!g_do_sub) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
@@ -2293,7 +2295,7 @@ static void project_load_handler(struct aviutl2_project_file *project) {
     }
     wcscpy(g_project_path, project_path);
   }
-  gcmz_do_sub(update_api_project_data, NULL);
+  gcmz_do_sub_do(g_do_sub, update_api_project_data, NULL);
   success = true;
 cleanup:
   if (!success) {
@@ -2345,7 +2347,7 @@ cleanup:
 
 static void paste_from_clipboard_handler(struct aviutl2_edit_section *edit) {
   (void)edit;
-  gcmz_do_sub(paste_from_clipboard_impl, NULL);
+  gcmz_do_sub_do(g_do_sub, paste_from_clipboard_impl, NULL);
 }
 
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host);

@@ -32,8 +32,6 @@ struct gcmz_do_sub {
   void *current_data;
 };
 
-static struct gcmz_do_sub *g_do_sub = NULL;
-
 static int worker_thread_proc(void *arg) {
   struct gcmz_do_sub *const ctx = (struct gcmz_do_sub *)arg;
   if (!ctx) {
@@ -72,7 +70,7 @@ static int worker_thread_proc(void *arg) {
   return 0;
 }
 
-static void do_sub_destroy(struct gcmz_do_sub **const ctxpp) {
+void gcmz_do_sub_destroy(struct gcmz_do_sub **const ctxpp) {
   if (!ctxpp || !*ctxpp) {
     return;
   }
@@ -109,7 +107,7 @@ static void do_sub_destroy(struct gcmz_do_sub **const ctxpp) {
   OV_FREE(ctxpp);
 }
 
-static struct gcmz_do_sub *do_sub_create(struct ov_error *const err) {
+NODISCARD struct gcmz_do_sub *gcmz_do_sub_create(struct ov_error *const err) {
   struct gcmz_do_sub *ctx = NULL;
   struct gcmz_do_sub *result = NULL;
   int r = 0;
@@ -162,12 +160,12 @@ static struct gcmz_do_sub *do_sub_create(struct ov_error *const err) {
 
 cleanup:
   if (ctx) {
-    do_sub_destroy(&ctx);
+    gcmz_do_sub_destroy(&ctx);
   }
   return result;
 }
 
-static void do_sub_do(struct gcmz_do_sub *const ctx, gcmz_do_sub_func func, void *data) {
+void gcmz_do_sub_do(struct gcmz_do_sub *const ctx, gcmz_do_sub_func func, void *data) {
   if (!ctx || !func) {
     return;
   }
@@ -188,7 +186,7 @@ static void do_sub_do(struct gcmz_do_sub *const ctx, gcmz_do_sub_func func, void
   mtx_unlock(&ctx->task_mutex);
 }
 
-static void do_sub_do_blocking(struct gcmz_do_sub *const ctx, gcmz_do_sub_func func, void *data) {
+void gcmz_do_sub_do_blocking(struct gcmz_do_sub *const ctx, gcmz_do_sub_func func, void *data) {
   if (!ctx || !func) {
     return;
   }
@@ -212,17 +210,3 @@ static void do_sub_do_blocking(struct gcmz_do_sub *const ctx, gcmz_do_sub_func f
 
   mtx_unlock(&ctx->task_mutex);
 }
-
-NODISCARD bool gcmz_do_sub_init(struct ov_error *const err) {
-  if (g_do_sub) {
-    do_sub_destroy(&g_do_sub);
-  }
-  g_do_sub = do_sub_create(err);
-  return g_do_sub != NULL;
-}
-
-void gcmz_do_sub_exit(void) { do_sub_destroy(&g_do_sub); }
-
-void gcmz_do_sub(gcmz_do_sub_func func, void *data) { do_sub_do(g_do_sub, func, data); }
-
-void gcmz_do_sub_blocking(gcmz_do_sub_func func, void *data) { do_sub_do_blocking(g_do_sub, func, data); }
