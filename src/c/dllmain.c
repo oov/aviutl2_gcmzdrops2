@@ -1,3 +1,11 @@
+
+// Plugin startup sequence:
+// The exported functions are called by AviUtl ExEdit2 in the following order:
+// 1. DllMain(DLL_PROCESS_ATTACH) - Standard Windows DLL entry point
+// 2. InitializeLogger - Called to set up logging functionality
+// 3. InitializePlugin - Called to initialize the plugin with AviUtl ExEdit2 version info
+// 4. RegisterPlugin - Called to register callbacks and handlers with AviUtl ExEdit2
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -88,14 +96,14 @@ static bool g_unknown_binary = false;
 static uint32_t g_aviutl2_version = 0;
 static wchar_t *g_project_path = NULL;
 
-// Synchronization primitives for delayed initialization thread
-// g_plugin_registered states:
-//   ov_indeterminate: sync primitives not initialized
-//   ov_false: initialized, waiting for RegisterPlugin
-//   ov_true: RegisterPlugin completed
+static enum plugin_state {
+  plugin_state_not_initialized, // sync primitives not initialized
+  plugin_state_initializing,    // initialized, waiting for RegisterPlugin
+  plugin_state_registered,      // RegisterPlugin completed successfully
+  plugin_state_failed,          // initialization failed (sync primitives need cleanup, but should not proceed)
+} g_plugin_state = plugin_state_not_initialized;
 static mtx_t g_init_mtx;
 static cnd_t g_init_cond;
-static ov_tribool g_plugin_registered = ov_indeterminate;
 
 static bool get_style(struct gcmz_analyze_style *style, void *userdata, struct ov_error *const err) {
   (void)userdata;
@@ -1815,17 +1823,17 @@ static void finalize(void *const userdata) {
   }
   gcmz_delayed_cleanup_exit();
   gcmz_temp_remove_directory();
-  gcmz_do_sub_destroy(&g_do_sub);
   gcmz_do_exit();
   gcmz_aviutl2_cleanup();
+  gcmz_do_sub_destroy(&g_do_sub);
   if (g_mo) {
     mo_set_default(NULL);
     mo_free(&g_mo);
   }
-  if (g_plugin_registered != ov_indeterminate) {
+  if (g_plugin_state != plugin_state_not_initialized) {
     cnd_destroy(&g_init_cond);
     mtx_destroy(&g_init_mtx);
-    g_plugin_registered = ov_indeterminate;
+    g_plugin_state = plugin_state_not_initialized;
   }
 }
 
@@ -1915,7 +1923,7 @@ static void on_temp_cleanup(wchar_t const *const dir_path, void *const userdata)
   gcmz_logf_info(NULL, NULL, pgettext("cleanup_stale_temporary_directories", "removed: %1$ls"), dir_path);
 }
 
-static int delayed_initialization_thread(void *userdata) {
+static void delayed_initialization(void *userdata) {
   (void)userdata;
 
   DWORD const start_tick = GetTickCount();
@@ -1942,12 +1950,13 @@ static int delayed_initialization_thread(void *userdata) {
                    pgettext("cleanup_stale_temporary_directories", "stale temporary directory cleanup complete"));
 
     mtx_lock(&g_init_mtx);
-    while (g_plugin_registered == ov_false) {
+    while (g_plugin_state == plugin_state_initializing) {
       cnd_wait(&g_init_cond, &g_init_mtx);
     }
+    enum plugin_state const state = g_plugin_state;
     mtx_unlock(&g_init_mtx);
 
-    if (!g_config) {
+    if (state != plugin_state_registered) {
       goto cleanup;
     }
 
@@ -1987,8 +1996,6 @@ cleanup:
     Sleep(delayed_window_registration_ms - elapsed);
   }
   gcmz_do(on_change_activate, NULL);
-
-  return 0;
 }
 
 static bool initialize(struct ov_error *const err) {
@@ -1996,25 +2003,24 @@ static bool initialize(struct ov_error *const err) {
   HWND main_window = NULL;
   wchar_t *script_dir = NULL;
 
-  if (g_plugin_registered == ov_indeterminate) {
-    if (mtx_init(&g_init_mtx, mtx_plain) != thrd_success) {
-      OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
-      goto cleanup;
-    }
-    if (cnd_init(&g_init_cond) != thrd_success) {
-      mtx_destroy(&g_init_mtx);
-      OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
-      goto cleanup;
-    }
-    g_plugin_registered = ov_false;
-
-    thrd_t thread;
-    if (thrd_create(&thread, delayed_initialization_thread, NULL) == thrd_success) {
-      thrd_detach(thread);
-    } else {
-      gcmz_logf_warn(NULL, "%s", "%s", gettext("failed to create thread for delayed initialization"));
-    }
+  if (mtx_init(&g_init_mtx, mtx_plain) != thrd_success) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+    goto cleanup;
   }
+  if (cnd_init(&g_init_cond) != thrd_success) {
+    mtx_destroy(&g_init_mtx);
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+    goto cleanup;
+  }
+  g_plugin_state = plugin_state_initializing;
+
+  g_do_sub = gcmz_do_sub_create(err);
+  if (!g_do_sub) {
+    OV_ERROR_ADD_TRACE(err);
+    goto cleanup;
+  }
+
+  gcmz_do_sub_do(g_do_sub, delayed_initialization, NULL);
 
   if (!g_mo) {
     HINSTANCE hinst = NULL;
@@ -2052,11 +2058,6 @@ static bool initialize(struct ov_error *const err) {
     goto cleanup;
   }
 
-  // If g_aviutl2_version was not set by InitializePlugin, get it from detected version
-  if (g_aviutl2_version == 0) {
-    g_aviutl2_version = gcmz_aviutl2_get_detected_version_uint32();
-  }
-
   main_window = gcmz_aviutl2_get_main_window();
   if (!gcmz_do_init(
           &(struct gcmz_do_init_option){
@@ -2065,12 +2066,6 @@ static bool initialize(struct ov_error *const err) {
               .on_change_activate = on_change_activate,
           },
           err)) {
-    OV_ERROR_ADD_TRACE(err);
-    goto cleanup;
-  }
-
-  g_do_sub = gcmz_do_sub_create(err);
-  if (!g_do_sub) {
     OV_ERROR_ADD_TRACE(err);
     goto cleanup;
   }
@@ -2135,11 +2130,8 @@ static bool initialize(struct ov_error *const err) {
   });
 
   if (!g_lua_ctx) {
-    // Lua context was not initialized in DllMain? Try to initialize here as well.
-    if (!gcmz_lua_create(&g_lua_ctx, err)) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_unexpected);
+    goto cleanup;
   }
   if (!gcmz_lua_setup(g_lua_ctx,
                       &(struct gcmz_lua_options){
@@ -2209,6 +2201,13 @@ cleanup:
     OV_ARRAY_DESTROY(&script_dir);
   }
   if (!success) {
+    if (g_do_sub) {
+      mtx_lock(&g_init_mtx);
+      g_plugin_state = plugin_state_failed;
+      cnd_signal(&g_init_cond);
+      mtx_unlock(&g_init_mtx);
+    }
+
     wchar_t title[128];
     wchar_t main_instruction[128];
     wchar_t content[512];
@@ -2382,7 +2381,7 @@ void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
 
   // Signal delayed initialization thread that RegisterPlugin is complete
   mtx_lock(&g_init_mtx);
-  g_plugin_registered = ov_true;
+  g_plugin_state = plugin_state_registered;
   cnd_signal(&g_init_cond);
   mtx_unlock(&g_init_mtx);
 }
