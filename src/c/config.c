@@ -667,8 +667,12 @@ cleanup:
   if (doc) {
     yyjson_doc_free(doc);
   }
-  OV_ARRAY_DESTROY(&json_str);
-  OV_ARRAY_DESTROY(&config_path);
+  if (json_str) {
+    OV_ARRAY_DESTROY(&json_str);
+  }
+  if (config_path) {
+    OV_ARRAY_DESTROY(&config_path);
+  }
   return result;
 }
 
@@ -766,8 +770,12 @@ cleanup:
   if (json_str) {
     OV_FREE(&json_str);
   }
-  OV_ARRAY_DESTROY(&path_utf8);
-  OV_ARRAY_DESTROY(&config_path);
+  if (path_utf8) {
+    OV_ARRAY_DESTROY(&path_utf8);
+  }
+  if (config_path) {
+    OV_ARRAY_DESTROY(&config_path);
+  }
   return result;
 }
 
