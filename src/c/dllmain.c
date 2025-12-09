@@ -1990,6 +1990,93 @@ cleanup:
   return NULL;
 }
 
+/**
+ * @brief Context for get_media_info_utf8 edit section callback
+ */
+struct get_media_info_context {
+  wchar_t const *filepath_w;
+  struct gcmz_lua_api_media_info *info;
+  bool success;
+};
+
+/**
+ * @brief Edit section callback for getting media info via official API
+ */
+static void get_media_info_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct get_media_info_context *const ctx = (struct get_media_info_context *)param;
+  if (!ctx || !edit || !edit->get_media_info) {
+    return;
+  }
+  struct aviutl2_media_info media_info = {0};
+  if (edit->get_media_info(ctx->filepath_w, &media_info, sizeof(media_info))) {
+    ctx->info->video_track_num = media_info.video_track_num;
+    ctx->info->audio_track_num = media_info.audio_track_num;
+    ctx->info->total_time = media_info.total_time;
+    ctx->info->width = media_info.width;
+    ctx->info->height = media_info.height;
+    ctx->success = true;
+  }
+}
+
+static bool
+get_media_info_utf8(char const *filepath, struct gcmz_lua_api_media_info *info, void *userdata, struct ov_error *err) {
+  (void)userdata;
+  if (!filepath || !info) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  if (!g_edit || !g_edit->call_edit_section_param) {
+    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "edit handle not available");
+    return false;
+  }
+
+  wchar_t *filepath_w = NULL;
+  bool result = false;
+
+  {
+    int const filepath_len = MultiByteToWideChar(CP_UTF8, 0, filepath, -1, NULL, 0);
+    if (filepath_len <= 0) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
+
+    if (!OV_ARRAY_GROW(&filepath_w, (size_t)filepath_len)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+
+    if (MultiByteToWideChar(CP_UTF8, 0, filepath, -1, filepath_w, filepath_len) <= 0) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
+
+    struct get_media_info_context ctx = {
+        .filepath_w = filepath_w,
+        .info = info,
+        .success = false,
+    };
+
+    if (!g_edit->call_edit_section_param(&ctx, get_media_info_edit_section)) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "call_edit_section_param failed");
+      goto cleanup;
+    }
+
+    if (!ctx.success) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "unsupported media file");
+      goto cleanup;
+    }
+  }
+
+  result = true;
+
+cleanup:
+  if (filepath_w) {
+    OV_ARRAY_DESTROY(&filepath_w);
+  }
+  return result;
+}
+
 static HICON load_icon(struct ov_error *const err) {
   enum { IDI_APPICON = 101 };
   void *hinstance = NULL;
@@ -2209,6 +2296,7 @@ static bool initialize(struct ov_error *const err) {
       .get_project_data = get_project_data_utf8,
       .debug_print = lua_debug_print,
       .script_dir_provider = get_script_directory_utf8,
+      .get_media_info = get_media_info_utf8,
       .userdata = NULL,
       .aviutl2_ver = g_aviutl2_version,
       .gcmz_ver = GCMZ_VERSION_UINT32,

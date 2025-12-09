@@ -23,6 +23,7 @@
 
 ### gcmz ネームスペース
 
+- [gcmz.get\_media\_info](#gcmzget_media_info)
 - [gcmz.get\_project\_data](#gcmzget_project_data)
 - [gcmz.get\_script\_directory](#gcmzget_script_directory)
 - [gcmz.get\_versions](#gcmzget_versions)
@@ -513,6 +514,71 @@ debug_print(string.format(i18n({
 ## gcmz ネームスペース
 
 以下の関数は `gcmz` グローバルテーブルを通じてアクセスします。
+
+---
+
+## gcmz.get_media_info
+
+指定されたメディアファイルの情報を取得します。
+
+### 構文
+
+```lua
+local info = gcmz.get_media_info(filepath)
+```
+
+### パラメーター
+
+| パラメーター | 型 | 説明 |
+|-----------|------|-------------|
+| `filepath` | string | メディアファイルのパス |
+
+### 戻り値
+
+以下のフィールドを含むテーブルを返します：
+
+| フィールド | 型 | 説明 |
+|-------|------|-------------|
+| `video_track_num` | integer | 動画トラック数（動画がない場合は 0） |
+| `audio_track_num` | integer | 音声トラック数（音声がない場合は 0） |
+| `total_time` | number または nil | 総再生時間（秒）。静止画の場合は `nil` |
+| `width` | integer または nil | 動画の幅（ピクセル単位）。音声ファイルの場合は `nil` |
+| `height` | integer または nil | 動画の高さ（ピクセル単位）。音声ファイルの場合は `nil` |
+
+### エラー
+
+- `filepath` が指定されていない場合、エラーをスローします。
+- 動画、音声、画像ファイル以外のファイルの場合、エラーをスローします。
+- AviUtl2 がサポートしていないメディアファイルの場合、エラーをスローします。
+
+### 例
+
+```lua
+local info = gcmz.get_media_info("C:/Videos/sample.mp4")
+print("動画トラック数: " .. info.video_track_num)
+print("音声トラック数: " .. info.audio_track_num)
+
+-- 動画かどうかを判定
+if info.video_track_num > 0 then
+    print("解像度: " .. info.width .. "x" .. info.height)
+end
+
+-- 静止画かどうかを判定
+if info.video_track_num > 0 and info.total_time == nil then
+    print("これは静止画ファイルです")
+end
+
+-- 動画（静止画以外）かどうかを判定
+if info.video_track_num > 0 and info.total_time then
+    print("総再生時間: " .. info.total_time .. " 秒")
+end
+
+-- 音声のみかどうかを判定
+if info.video_track_num == 0 and info.audio_track_num > 0 then
+    print("これは音声ファイルです")
+    print("総再生時間: " .. info.total_time .. " 秒")
+end
+```
 
 ---
 

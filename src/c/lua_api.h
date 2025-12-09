@@ -59,6 +59,31 @@ typedef void (*gcmz_lua_api_debug_print_fn)(void *userdata, char const *message)
 typedef char *(*gcmz_lua_api_script_dir_provider_fn)(void *userdata, struct ov_error *err);
 
 /**
+ * @brief Media information structure for Lua API
+ */
+struct gcmz_lua_api_media_info {
+  int video_track_num; /**< Video track count (0 if no video) */
+  int audio_track_num; /**< Audio track count (0 if no audio) */
+  double total_time;   /**< Total time in seconds (0 for still images) */
+  int width;           /**< Video width */
+  int height;          /**< Video height */
+};
+
+/**
+ * @brief Callback function type for getting media file information
+ *
+ * @param filepath Media file path (UTF-8)
+ * @param info [out] Media information to fill
+ * @param userdata User-provided data
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure (unsupported or error)
+ */
+typedef NODISCARD bool (*gcmz_lua_api_get_media_info_fn)(char const *filepath,
+                                                         struct gcmz_lua_api_media_info *info,
+                                                         void *userdata,
+                                                         struct ov_error *err);
+
+/**
  * @brief Options for Lua API registration
  */
 struct gcmz_lua_api_options {
@@ -67,6 +92,7 @@ struct gcmz_lua_api_options {
   gcmz_lua_api_get_project_data_fn get_project_data;
   gcmz_lua_api_debug_print_fn debug_print;
   gcmz_lua_api_script_dir_provider_fn script_dir_provider;
+  gcmz_lua_api_get_media_info_fn get_media_info;
   void *userdata;
   uint32_t aviutl2_ver;
   uint32_t gcmz_ver;

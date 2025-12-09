@@ -492,6 +492,64 @@ cleanup:
   return result < 0 ? gcmz_luafn_err(L, &err) : result;
 }
 
+static int gcmz_lua_get_media_info(lua_State *L) {
+  if (!g_lua_api_options.get_media_info) {
+    return luaL_error(L, "get_media_info is not available (no media info provider configured)");
+  }
+
+  char const *filepath = luaL_checkstring(L, 1);
+  if (!filepath || !*filepath) {
+    return luaL_error(L, "get_media_info requires filepath");
+  }
+
+  struct ov_error err = {0};
+  struct gcmz_lua_api_media_info info = {0};
+  int result = -1;
+
+  {
+    if (!g_lua_api_options.get_media_info(filepath, &info, g_lua_api_options.userdata, &err)) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+
+    lua_createtable(L, 0, 5);
+
+    // video_track_num and audio_track_num are always present (0 has meaning)
+    lua_pushstring(L, "video_track_num");
+    lua_pushinteger(L, info.video_track_num);
+    lua_settable(L, -3);
+
+    lua_pushstring(L, "audio_track_num");
+    lua_pushinteger(L, info.audio_track_num);
+    lua_settable(L, -3);
+
+    // total_time is nil for still images (video_track_num > 0 but no duration)
+    lua_pushstring(L, "total_time");
+    if (info.video_track_num > 0 && info.total_time <= 0) {
+      lua_pushnil(L); // still image
+    } else {
+      lua_pushnumber(L, info.total_time);
+    }
+    lua_settable(L, -3);
+
+    // width and height are nil for audio-only files
+    if (info.video_track_num > 0) {
+      lua_pushstring(L, "width");
+      lua_pushinteger(L, info.width);
+      lua_settable(L, -3);
+
+      lua_pushstring(L, "height");
+      lua_pushinteger(L, info.height);
+      lua_settable(L, -3);
+    }
+  }
+
+  result = 1;
+
+cleanup:
+  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+}
+
 // Decode EXO text field (hex-encoded UTF-16LE) to UTF-8
 // EXO text format: each UTF-16LE code unit is represented as 4 hex digits (little-endian byte order)
 // Example: "41004200" = "AB" (0x0041 = 'A', 0x0042 = 'B')
@@ -915,6 +973,8 @@ bool gcmz_lua_api_register(struct lua_State *const L, struct ov_error *const err
   lua_setfield(L, -2, "convert_encoding");
   lua_pushcfunction(L, gcmz_lua_decode_exo_text);
   lua_setfield(L, -2, "decode_exo_text");
+  lua_pushcfunction(L, gcmz_lua_get_media_info);
+  lua_setfield(L, -2, "get_media_info");
   lua_pushcfunction(L, gcmz_lua_get_project_data);
   lua_setfield(L, -2, "get_project_data");
   lua_pushcfunction(L, gcmz_lua_get_script_directory);
