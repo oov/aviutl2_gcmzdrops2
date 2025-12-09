@@ -604,19 +604,19 @@ local data = gcmz.get_project_data()
 |-------|------|-------------|
 | `width` | integer | 動画の幅（ピクセル単位） |
 | `height` | integer | 動画の高さ（ピクセル単位） |
-| `video_rate` | integer | 動画フレームレートの分子 |
-| `video_scale` | integer | 動画フレームレートの分母 |
+| `rate` | integer | 動画フレームレートの分子 |
+| `scale` | integer | 動画フレームレートの分母 |
 | `sample_rate` | integer | 音声サンプリングレート（Hz） |
 | `project_path` | string または nil | プロジェクトファイルのパス、未保存の場合は nil |
 
-実際のフレームレート（fps）は `video_rate / video_scale` で計算できます。
+実際のフレームレート（fps）は `rate / scale` で計算できます。
 
 ### 例
 
 ```lua
 local project = gcmz.get_project_data()
 print("解像度: " .. project.width .. "x" .. project.height)
-print("フレームレート: " .. (project.video_rate / project.video_scale) .. " fps")
+print("フレームレート: " .. (project.rate / project.scale) .. " fps")
 print("サンプリングレート: " .. project.sample_rate .. " Hz")
 if project.project_path then
     print("プロジェクトパス: " .. project.project_path)
