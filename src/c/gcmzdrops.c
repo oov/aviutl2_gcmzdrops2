@@ -87,7 +87,6 @@ enum gcmzdrops_plugin_state {
 };
 
 struct gcmzdrops {
-  struct mo *mo;
   struct gcmz_config *config;
   struct gcmz_api *api;
   struct gcmz_drop *drop;
@@ -1935,10 +1934,6 @@ static void finalize(void *const userdata) {
   gcmz_do_exit();
   gcmz_aviutl2_cleanup();
   gcmz_do_sub_destroy(&ctx->do_sub);
-  if (ctx->mo) {
-    mo_set_default(NULL);
-    mo_free(&ctx->mo);
-  }
   if (ctx->plugin_state != gcmzdrops_plugin_state_not_initialized) {
     cnd_destroy(&ctx->init_cond);
     mtx_destroy(&ctx->init_mtx);
@@ -2197,6 +2192,7 @@ static void delayed_initialization(void *userdata) {
     mtx_unlock(&ctx->init_mtx);
 
     if (state != gcmzdrops_plugin_state_registered) {
+      OV_ERROR_SET_GENERIC(&err, ov_error_generic_fail);
       goto cleanup;
     }
 
@@ -2297,20 +2293,6 @@ bool gcmzdrops_create(struct gcmzdrops **const ctx,
     }
 
     gcmz_do_sub_do(c->do_sub, delayed_initialization, c);
-
-    if (!c->mo) {
-      HINSTANCE hinst = NULL;
-      if (!ovl_os_get_hinstance_from_fnptr((void *)gcmzdrops_create, (void **)&hinst, err)) {
-        OV_ERROR_ADD_TRACE(err);
-        goto cleanup;
-      }
-      c->mo = mo_parse_from_resource(hinst, err);
-      if (c->mo) {
-        mo_set_default(c->mo);
-      } else {
-        gcmz_logf_warn(NULL, "%s", "%s", gettext("failed to load language resources, continuing without them."));
-      }
-    }
 
     switch (gcmz_aviutl2_init(err)) {
     case gcmz_aviutl2_status_success:
@@ -2490,21 +2472,6 @@ cleanup:
       mtx_unlock(&c->init_mtx);
     }
 
-    wchar_t title[128];
-    wchar_t main_instruction[128];
-    wchar_t content[512];
-    ov_snprintf_wchar(title, sizeof(title) / sizeof(title[0]), L"%s", L"%s", gettext("GCMZDrops"));
-    ov_snprintf_wchar(main_instruction,
-                      sizeof(main_instruction) / sizeof(main_instruction[0]),
-                      L"%s",
-                      L"%s",
-                      gettext("Failed to initialize GCMZDrops."));
-    ov_snprintf_wchar(content,
-                      sizeof(content) / sizeof(content[0]),
-                      L"%s",
-                      L"%s",
-                      gettext("The plugin could not start correctly.\nGCMZDrops is unavailable at the moment."));
-    gcmz_error_dialog(NULL, err, title, main_instruction, content, TD_ERROR_ICON, TDCBF_OK_BUTTON);
     gcmzdrops_destroy(&c);
   }
   return result;

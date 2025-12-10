@@ -14,6 +14,8 @@
 #include <ovprintf.h>
 #include <ovutf.h>
 
+#include <ovl/os.h>
+
 #include <aviutl2_logger2.h>
 #include <aviutl2_plugin2.h>
 
@@ -25,6 +27,7 @@
 
 static struct gcmz_lua_context *g_lua = NULL;
 static struct gcmzdrops *g_gcmzdrops = NULL;
+static struct mo *g_mo = NULL;
 
 /**
  * @brief Get or create the Lua context
@@ -55,15 +58,34 @@ void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) {
 BOOL __declspec(dllexport) InitializePlugin(DWORD version);
 BOOL __declspec(dllexport) InitializePlugin(DWORD version) {
   struct ov_error err = {0};
-  struct gcmz_lua_context *const lua = get_lua(&err);
-  if (!lua) {
-    OV_ERROR_ADD_TRACE(&err);
-    goto cleanup;
+
+  // Initialize language resources
+  if (!g_mo) {
+    HINSTANCE hinst = NULL;
+    if (!ovl_os_get_hinstance_from_fnptr((void *)InitializePlugin, (void **)&hinst, &err)) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+    g_mo = mo_parse_from_resource(hinst, &err);
+    if (g_mo) {
+      mo_set_default(g_mo);
+    } else {
+      gcmz_logf_warn(NULL, "%s", "%s", gettext("failed to load language resources, continuing without them."));
+    }
   }
-  if (!gcmzdrops_create(&g_gcmzdrops, lua, version, &err)) {
-    OV_ERROR_ADD_TRACE(&err);
-    goto cleanup;
+
+  {
+    struct gcmz_lua_context *const lua = get_lua(&err);
+    if (!lua) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+    if (!gcmzdrops_create(&g_gcmzdrops, lua, version, &err)) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
   }
+
 cleanup:
   if (!g_gcmzdrops) {
     wchar_t title[128];
@@ -92,6 +114,10 @@ void __declspec(dllexport) UninitializePlugin(void) {
   gcmzdrops_destroy(&g_gcmzdrops);
   if (g_lua) {
     gcmz_lua_destroy(&g_lua);
+  }
+  if (g_mo) {
+    mo_set_default(NULL);
+    mo_free(&g_mo);
   }
 }
 
