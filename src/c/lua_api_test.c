@@ -60,7 +60,11 @@ static void test_api_register(void) {
   });
 
   struct ov_error err = {0};
-  TEST_CHECK(gcmz_lua_api_register(L, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
+    lua_close(L);
+    gcmz_lua_api_set_options(NULL);
+    return;
+  }
 
   // Check if gcmz global table was created
   lua_getglobal(L, "gcmz");
@@ -95,7 +99,11 @@ static void test_convert_encoding(void) {
   });
 
   struct ov_error err = {0};
-  TEST_CHECK(gcmz_lua_api_register(L, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
+    lua_close(L);
+    gcmz_lua_api_set_options(NULL);
+    return;
+  }
 
   // Test same encoding (no conversion needed)
   int result = luaL_dostring(L, "return gcmz.convert_encoding('Hello', 'utf8', 'utf8')");
@@ -140,10 +148,7 @@ static void test_register_invalid_args(void) {
   struct ov_error err = {0};
 
   // Test with NULL lua_State
-  TEST_CHECK(!gcmz_lua_api_register(NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_api_register(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 }
 
 static void test_decode_exo_text(void) {
@@ -159,8 +164,7 @@ static void test_decode_exo_text(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
     return;
@@ -240,8 +244,7 @@ static void test_debug_print(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
     return;
@@ -301,8 +304,7 @@ static void test_get_script_directory(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
     return;
@@ -347,8 +349,7 @@ static void test_get_script_directory_no_provider(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
     return;
@@ -377,8 +378,7 @@ static void test_i18n(void) {
   });
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_api_register(L, &err))) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (!TEST_SUCCEEDED(gcmz_lua_api_register(L, &err), &err)) {
     lua_close(L);
     gcmz_lua_api_set_options(NULL);
     return;

@@ -155,39 +155,30 @@ static bool compare_ini_contents(char const *want, size_t want_len, char const *
   bool *got_matched = NULL;
 
   {
-    if (!gcmz_ini_reader_create(&want_ini, &err) || !gcmz_ini_reader_create(&got_ini, &err)) {
-      OV_ERROR_DESTROY(&err);
-      TEST_CHECK(false);
-      TEST_MSG("failed to create ini readers for comparison");
+    if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&want_ini, &err), &err)) {
+      goto cleanup;
+    }
+    if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&got_ini, &err), &err)) {
       goto cleanup;
     }
 
-    if (!gcmz_ini_reader_load_memory(want_ini, want, want_len, &err)) {
-      OV_ERROR_DESTROY(&err);
-      TEST_CHECK(false);
-      TEST_MSG("failed to parse expected INI");
+    if (!TEST_SUCCEEDED(gcmz_ini_reader_load_memory(want_ini, want, want_len, &err), &err)) {
       goto cleanup;
     }
 
-    if (!gcmz_ini_reader_load_memory(got_ini, got, got_len, &err)) {
-      OV_ERROR_DESTROY(&err);
-      TEST_CHECK(false);
-      TEST_MSG("failed to parse converted INI");
+    if (!TEST_SUCCEEDED(gcmz_ini_reader_load_memory(got_ini, got, got_len, &err), &err)) {
       goto cleanup;
     }
 
     size_t want_count = gcmz_ini_reader_get_section_count(want_ini);
     size_t got_count = gcmz_ini_reader_get_section_count(got_ini);
 
-    if (want_count != got_count) {
-      TEST_CHECK(false);
-      TEST_MSG("section count mismatch: want %zu, got %zu", want_count, got_count);
+    if (!TEST_CHECK(want_count == got_count)) {
+      TEST_MSG("want %zu, got %zu", want_count, got_count);
       goto cleanup;
     }
 
-    if (!OV_ARRAY_GROW(&got_matched, got_count)) {
-      TEST_CHECK(false);
-      TEST_MSG("out of memory");
+    if (!TEST_CHECK(OV_ARRAY_GROW(&got_matched, got_count))) {
       goto cleanup;
     }
     memset(got_matched, 0, sizeof(bool) * got_count);
@@ -224,8 +215,7 @@ static bool compare_ini_contents(char const *want, size_t want_len, char const *
         got_idx++;
       }
 
-      if (!found_match) {
-        TEST_CHECK(false);
+      if (!TEST_CHECK(found_match)) {
         TEST_MSG("No matching section found for section '%s'", want_section);
 
         TEST_MSG("Content of want section '%s':", want_section);
@@ -340,8 +330,7 @@ static void test_exo_convert(void) {
     struct ov_error err = {0};
 
     {
-      if (!TEST_CHECK(read_file(test_cases[i].dest, &expected, &expected_len, &err))) {
-        OV_ERROR_DESTROY(&err);
+      if (!TEST_SUCCEEDED(read_file(test_cases[i].dest, &expected, &expected_len, &err), &err)) {
         goto cleanup;
       }
 

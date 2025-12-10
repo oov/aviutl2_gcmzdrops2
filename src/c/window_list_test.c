@@ -3,10 +3,21 @@
 #include "gcmz_types.h"
 #include "window_list.h"
 
+static bool
+check_window_list_update(struct gcmz_window_list *wl, struct gcmz_window_info *windows, size_t count, ov_tribool want) {
+  struct ov_error err = {0};
+  ov_tribool got = gcmz_window_list_update(wl, windows, count, &err);
+  if (got == ov_indeterminate) {
+    OV_ERROR_DESTROY(&err);
+    return TEST_CHECK(got == want);
+  }
+  return TEST_CHECK(got == want);
+}
+
 static void test_create_destroy(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   size_t num_windows = 999;
   struct gcmz_window_info const *items = gcmz_window_list_get(wl, &num_windows);
@@ -20,10 +31,10 @@ static void test_create_destroy(void) {
 static void test_update_empty(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   struct gcmz_window_info windows[] = {0};
-  TEST_CHECK(gcmz_window_list_update(wl, windows, 0, &err) == ov_false);
+  check_window_list_update(wl, windows, 0, ov_false);
 
   size_t num_windows = 999;
   gcmz_window_list_get(wl, &num_windows);
@@ -35,7 +46,7 @@ static void test_update_empty(void) {
 static void test_update_change_detected(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   // First update - should detect change from empty
   struct gcmz_window_info windows1[] = {
@@ -43,7 +54,7 @@ static void test_update_change_detected(void) {
       {.window = (void *)0x2000, .width = 150, .height = 250},
   };
   enum { windows1_count = sizeof(windows1) / sizeof(windows1[0]) };
-  TEST_CHECK(gcmz_window_list_update(wl, windows1, windows1_count, &err) == ov_true);
+  check_window_list_update(wl, windows1, windows1_count, ov_true);
 
   // Second update with different windows - should detect change
   struct gcmz_window_info windows2[] = {
@@ -51,7 +62,7 @@ static void test_update_change_detected(void) {
       {.window = (void *)0x4000, .width = 150, .height = 250},
   };
   enum { windows2_count = sizeof(windows2) / sizeof(windows2[0]) };
-  TEST_CHECK(gcmz_window_list_update(wl, windows2, windows2_count, &err) == ov_true);
+  check_window_list_update(wl, windows2, windows2_count, ov_true);
 
   gcmz_window_list_destroy(&wl);
 }
@@ -59,7 +70,7 @@ static void test_update_change_detected(void) {
 static void test_update_no_change(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   struct gcmz_window_info windows[] = {
       {.window = (void *)0x1000, .width = 100, .height = 200},
@@ -67,10 +78,10 @@ static void test_update_no_change(void) {
   };
   enum { windows_count = sizeof(windows) / sizeof(windows[0]) };
 
-  TEST_CHECK(gcmz_window_list_update(wl, windows, windows_count, &err) == ov_true);
+  check_window_list_update(wl, windows, windows_count, ov_true);
 
   // Update with same windows - should detect no change
-  TEST_CHECK(gcmz_window_list_update(wl, windows, windows_count, &err) == ov_false);
+  check_window_list_update(wl, windows, windows_count, ov_false);
 
   gcmz_window_list_destroy(&wl);
 }
@@ -78,7 +89,7 @@ static void test_update_no_change(void) {
 static void test_update_size_change(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   struct gcmz_window_info windows1[] = {
       {.window = (void *)0x1000, .width = 100, .height = 200},
@@ -86,7 +97,7 @@ static void test_update_size_change(void) {
   };
   enum { windows1_count = sizeof(windows1) / sizeof(windows1[0]) };
 
-  TEST_CHECK(gcmz_window_list_update(wl, windows1, windows1_count, &err) == ov_true);
+  check_window_list_update(wl, windows1, windows1_count, ov_true);
 
   // Update with different sizes but same windows
   struct gcmz_window_info windows2[] = {
@@ -94,7 +105,7 @@ static void test_update_size_change(void) {
       {.window = (void *)0x2000, .width = 250, .height = 350},
   };
   enum { windows2_count = sizeof(windows2) / sizeof(windows2[0]) };
-  TEST_CHECK(gcmz_window_list_update(wl, windows2, windows2_count, &err) == ov_false);
+  check_window_list_update(wl, windows2, windows2_count, ov_false);
 
   // Verify sizes were updated
   size_t num_windows = 0;
@@ -119,7 +130,7 @@ static void test_update_size_change(void) {
 static void test_update_too_many_windows(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   enum { num_windows = 9 };
   struct gcmz_window_info windows[num_windows];
@@ -131,17 +142,18 @@ static void test_update_too_many_windows(void) {
     };
   }
 
-  TEST_CHECK(gcmz_window_list_update(wl, windows, num_windows, &err) == ov_indeterminate);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_fail));
+  TEST_FAILED_WITH(gcmz_window_list_update(wl, windows, num_windows, &err) != ov_indeterminate,
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_fail);
 
   gcmz_window_list_destroy(&wl);
-  OV_ERROR_DESTROY(&err);
 }
 
 static void test_update_invalid_args(void) {
   struct ov_error err = {0};
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
-  TEST_CHECK(wl != NULL);
+  TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
   struct gcmz_window_info windows[] = {
       {.window = (void *)0x1000, .width = 100, .height = 200},
@@ -149,16 +161,18 @@ static void test_update_invalid_args(void) {
   enum { windows_count = sizeof(windows) / sizeof(windows[0]) };
 
   // NULL window list
-  TEST_CHECK(gcmz_window_list_update(NULL, windows, windows_count, &err) == ov_indeterminate);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_window_list_update(NULL, windows, windows_count, &err) != ov_indeterminate,
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // NULL windows array
-  TEST_CHECK(gcmz_window_list_update(wl, NULL, windows_count, &err) == ov_indeterminate);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
+  TEST_FAILED_WITH(gcmz_window_list_update(wl, NULL, windows_count, &err) != ov_indeterminate,
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   gcmz_window_list_destroy(&wl);
-  OV_ERROR_DESTROY(&err);
 }
 
 static void test_get_invalid_args(void) {

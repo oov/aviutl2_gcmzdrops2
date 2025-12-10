@@ -116,9 +116,10 @@ static void test_drop_null_safety(void) {
   struct ov_error err = {0};
   gcmz_drop_destroy(NULL);
 
-  TEST_CHECK(!gcmz_drop_create_file_list_dataobj(NULL, 0, 0, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_drop_create_file_list_dataobj(NULL, 0, 0, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 }
 
 // Test real COM integration
@@ -132,7 +133,7 @@ static void test_drop_real_com_integration(void) {
   TEST_ASSERT(SUCCEEDED(OleInitialize(NULL)));
 
   // Create Lua context for testing
-  if (!TEST_CHECK(gcmz_lua_create(&lua_ctx, &err))) {
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&lua_ctx, &err), &err)) {
     goto cleanup;
   }
 
@@ -162,13 +163,11 @@ static void test_drop_real_com_integration(void) {
   }
 
   d = gcmz_drop_create(mock_dataobj_extract, mock_cleanup_temp_files, NULL, NULL, lua_ctx, &err);
-  if (!TEST_CHECK(d != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(d != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_drop_register_window(d, real_window, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_drop_register_window(d, real_window, &err), &err)) {
     goto cleanup;
   }
 

@@ -55,8 +55,7 @@ static void test_config_create_destroy(void) {
   struct gcmz_config *config = NULL;
   struct ov_error err = {0};
   config = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
   gcmz_config_destroy(&config);
@@ -69,13 +68,11 @@ static void test_config_default_values(void) {
   struct ov_error err = {0};
 
   config = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_get_processing_mode(config, &mode, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_get_processing_mode(config, &mode, &err), &err)) {
     goto cleanup;
   }
   TEST_CHECK(mode == gcmz_processing_mode_auto);
@@ -90,29 +87,24 @@ static void test_config_processing_mode_getset(void) {
   struct ov_error err = {0};
 
   config = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_processing_mode(config, gcmz_processing_mode_direct, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_processing_mode(config, gcmz_processing_mode_direct, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_get_processing_mode(config, &mode, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_get_processing_mode(config, &mode, &err), &err)) {
     goto cleanup;
   }
   TEST_CHECK(mode == gcmz_processing_mode_direct);
 
-  if (!TEST_CHECK(gcmz_config_set_processing_mode(config, gcmz_processing_mode_copy, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_processing_mode(config, gcmz_processing_mode_copy, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_get_processing_mode(config, &mode, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_get_processing_mode(config, &mode, &err), &err)) {
     goto cleanup;
   }
   TEST_CHECK(mode == gcmz_processing_mode_copy);
@@ -128,34 +120,28 @@ static void test_config_save_load(void) {
   struct ov_error err = {0};
 
   config1 = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config1 != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config1 != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_processing_mode(config1, gcmz_processing_mode_direct, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_processing_mode(config1, gcmz_processing_mode_direct, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_save(config1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_save(config1, &err), &err)) {
     goto cleanup;
   }
 
   config2 = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config2 != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config2 != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_load(config2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_load(config2, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_get_processing_mode(config2, &mode, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_get_processing_mode(config2, &mode, &err), &err)) {
     goto cleanup;
   }
   TEST_CHECK(mode == gcmz_processing_mode_direct);
@@ -175,13 +161,11 @@ static void test_config_get_save_path_with_save_paths(void) {
   wchar_t expected_path[MAX_PATH];
 
   config = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_allow_create_directories(config, true, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_allow_create_directories(config, true, &err), &err)) {
     goto cleanup;
   }
 
@@ -189,14 +173,12 @@ static void test_config_get_save_path_with_save_paths(void) {
   ov_snprintf_wchar(test_path, MAX_PATH, NULL, L"%lsTestSavePaths", temp_dir);
 
   test_paths[0] = test_path;
-  if (!TEST_CHECK(gcmz_config_set_save_paths(config, test_paths, 1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_save_paths(config, test_paths, 1, &err), &err)) {
     goto cleanup;
   }
 
   save_path = gcmz_config_get_save_path(config, L"test.png", &err);
-  if (!TEST_CHECK(save_path != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(save_path != NULL, &err)) {
     goto cleanup;
   }
 
@@ -218,24 +200,20 @@ static void test_config_get_save_path_nonexistent_dir_no_create(void) {
   wchar_t const *test_paths[] = {L"C:\\NonExistentTestPath"};
 
   config = gcmz_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_allow_create_directories(config, false, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_allow_create_directories(config, false, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_save_paths(config, test_paths, 1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_save_paths(config, test_paths, 1, &err), &err)) {
     goto cleanup;
   }
 
   save_path = gcmz_config_get_save_path(config, L"test.png", &err);
-  if (!TEST_CHECK(save_path != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(save_path != NULL, &err)) {
     goto cleanup;
   }
   TEST_CHECK(wcsstr(save_path, L"GCMZShared\\") != NULL);
@@ -269,24 +247,20 @@ static void test_config_get_save_path_project_based(void) {
           .project_path_provider_userdata = NULL,
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_allow_create_directories(config, true, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_allow_create_directories(config, true, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_config_set_save_paths(config, test_paths, 1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_config_set_save_paths(config, test_paths, 1, &err), &err)) {
     goto cleanup;
   }
 
   save_path = gcmz_config_get_save_path(config, L"test.png", &err);
-  if (!TEST_CHECK(save_path != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(save_path != NULL, &err)) {
     goto cleanup;
   }
 
@@ -315,16 +289,14 @@ static void test_config_get_save_path_fallback_to_shared(void) {
           .project_path_provider_userdata = NULL,
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     goto cleanup;
   }
 
   // Default save_paths contains %PROJECTDIR%, but project_path_provider returns NULL
   // so it should fallback to shared folder
   save_path = gcmz_config_get_save_path(config, L"test.png", &err);
-  if (!TEST_CHECK(save_path != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(save_path != NULL, &err)) {
     goto cleanup;
   }
   TEST_CHECK(wcsstr(save_path, L"GCMZShared\\") != NULL);
@@ -372,8 +344,8 @@ static void test_config_expand_vars_single_variable(void) {
   wchar_t const *var_values[] = {L"C:\\Projects\\MyProject"};
   struct test_callback_data data = {var_names, var_values, 1};
 
-  if (!TEST_CHECK(expand_vars(L"%PROJECTDIR%\\files\\data.txt", test_expand_vars_callback, &data, &expanded, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(expand_vars(L"%PROJECTDIR%\\files\\data.txt", test_expand_vars_callback, &data, &expanded, &err),
+                      &err)) {
   }
   TEST_ASSERT(expanded != NULL);
   TEST_CHECK(STRCMP(expanded, L"C:\\Projects\\MyProject\\files\\data.txt") == 0);
@@ -389,9 +361,9 @@ static void test_config_expand_vars_multiple_variables(void) {
   wchar_t const *var_values[] = {L"C:\\Projects\\MyProject", L"user"};
   struct test_callback_data data = {var_names, var_values, 2};
 
-  if (!TEST_CHECK(expand_vars(
-          L"%PROJECTDIR%\\files\\%USERNAME%\\data.txt", test_expand_vars_callback, &data, &expanded, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(
+          expand_vars(L"%PROJECTDIR%\\files\\%USERNAME%\\data.txt", test_expand_vars_callback, &data, &expanded, &err),
+          &err)) {
   }
   TEST_ASSERT(expanded != NULL);
   TEST_CHECK(STRCMP(expanded, L"C:\\Projects\\MyProject\\files\\user\\data.txt") == 0);
@@ -407,8 +379,8 @@ static void test_config_expand_vars_multiple_occurrences(void) {
   wchar_t const *var_values[] = {L"test"};
   struct test_callback_data data = {var_names, var_values, 1};
 
-  if (!TEST_CHECK(expand_vars(L"%DIR%\\%DIR%\\file.txt", test_expand_vars_callback, &data, &expanded, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(expand_vars(L"%DIR%\\%DIR%\\file.txt", test_expand_vars_callback, &data, &expanded, &err),
+                      &err)) {
   }
   TEST_ASSERT(expanded != NULL);
   TEST_CHECK(STRCMP(expanded, L"test\\test\\file.txt") == 0);
@@ -431,8 +403,7 @@ static void test_config_expand_vars_no_variables(void) {
   wchar_t *expanded = NULL;
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(expand_vars(L"C:\\simple\\path\\file.txt", empty_callback, NULL, &expanded, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(expand_vars(L"C:\\simple\\path\\file.txt", empty_callback, NULL, &expanded, &err), &err)) {
   }
   TEST_ASSERT(expanded != NULL);
   TEST_CHECK(STRCMP(expanded, L"C:\\simple\\path\\file.txt") == 0);
@@ -448,8 +419,8 @@ static void test_config_expand_vars_undefined_variables(void) {
   wchar_t const *var_values[] = {L"value"};
   struct test_callback_data data = {var_names, var_values, 1};
 
-  if (!TEST_CHECK(expand_vars(L"%KNOWN%\\%UNKNOWN%\\file.txt", test_expand_vars_callback, &data, &expanded, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(expand_vars(L"%KNOWN%\\%UNKNOWN%\\file.txt", test_expand_vars_callback, &data, &expanded, &err),
+                      &err)) {
   }
   TEST_ASSERT(expanded != NULL);
   TEST_CHECK(STRCMP(expanded, L"value\\%UNKNOWN%\\file.txt") == 0);
@@ -466,46 +437,36 @@ static void test_config_error_handling(void) {
   config = gcmz_config_create(NULL, &err);
   TEST_ASSERT(config != NULL);
 
-  if (TEST_CHECK(gcmz_config_get_processing_mode(NULL, &mode, &err) == false)) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(gcmz_config_get_processing_mode(config, NULL, &err) == false)) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(gcmz_config_set_processing_mode(NULL, gcmz_processing_mode_direct, &err) == false)) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (gcmz_config_get_save_path(NULL, L"test.png", &err) == NULL) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (gcmz_config_get_save_path(config, NULL, &err) == NULL) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (expand_vars(NULL, NULL, NULL, &path, &err) == false) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (expand_vars(L"test", NULL, NULL, &path, &err) == false) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (expand_vars(L"test", empty_callback, NULL, NULL, &err) == false) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (gcmz_config_load(NULL, &err) == false) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (gcmz_config_save(NULL, &err) == false) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_config_get_processing_mode(NULL, &mode, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_get_processing_mode(config, NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_set_processing_mode(NULL, gcmz_processing_mode_direct, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_get_save_path(NULL, L"test.png", &err) != NULL,
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_get_save_path(config, NULL, &err) != NULL,
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(
+      expand_vars(NULL, NULL, NULL, &path, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(
+      expand_vars(L"test", NULL, NULL, &path, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(expand_vars(L"test", empty_callback, NULL, NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_load(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_config_save(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
   gcmz_config_destroy(&config);
 }
 

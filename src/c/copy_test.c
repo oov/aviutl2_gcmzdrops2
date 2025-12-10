@@ -87,16 +87,13 @@ static void test_hash_filename_generation(void) {
   static uint64_t const test_hash = 0x123456789abcdef0ULL;
 
   temp_path = create_test_file(L"gcmz_test.txt", "Hello, World!", &err);
-  if (!TEST_CHECK(temp_path != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(temp_path != NULL, &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(generate_hash_filename_from_hash(temp_path, test_hash, &hash_filename1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(generate_hash_filename_from_hash(temp_path, test_hash, &hash_filename1, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(generate_hash_filename_from_hash(temp_path, test_hash, &hash_filename2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(generate_hash_filename_from_hash(temp_path, test_hash, &hash_filename2, &err), &err)) {
     goto cleanup;
   }
   TEST_CHECK(wcscmp(hash_filename1, hash_filename2) == 0);
@@ -155,15 +152,14 @@ static void test_file_management_with_callback(void) {
   CreateDirectoryW(temp_dir, NULL);
 
   source_file = create_test_file(L"gcmz_source_test.bin", "Test content for file management", &err);
-  if (!TEST_CHECK(source_file != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(source_file != NULL, &err)) {
     goto cleanup;
   }
 
   {
     struct test_save_path_context ctx = {.base_dir = temp_dir};
-    if (!TEST_CHECK(gcmz_copy(source_file, gcmz_processing_mode_copy, mock_get_save_path, &ctx, &final_file, &err))) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(gcmz_copy(source_file, gcmz_processing_mode_copy, mock_get_save_path, &ctx, &final_file, &err),
+                        &err)) {
       goto cleanup;
     }
   }

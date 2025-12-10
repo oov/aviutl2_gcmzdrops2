@@ -37,8 +37,7 @@ static void test_create_destroy(void) {
   struct ov_error err = {0};
 
   // Test successful creation
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
   if (!TEST_CHECK(ctx != NULL)) {
@@ -60,23 +59,17 @@ static void test_create_destroy(void) {
   gcmz_lua_destroy(NULL);
 
   // Test create with NULL pointer
-  TEST_CHECK(!gcmz_lua_create(NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
+  TEST_FAILED_WITH(gcmz_lua_create(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test create with already initialized pointer
-  OV_ERROR_DESTROY(&err);
   ctx = (struct gcmz_lua_context *)0x1; // Non-NULL value
-  TEST_CHECK(!gcmz_lua_create(&ctx, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_create(&ctx, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 }
 
 static void test_standard_libraries(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
@@ -144,8 +137,7 @@ static void test_standard_libraries(void) {
 static void test_script_execution(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
@@ -181,9 +173,7 @@ static void test_null_pointer_handling(void) {
   struct ov_error err = {0};
 
   // Test gcmz_lua_create with NULL
-  TEST_CHECK(!gcmz_lua_create(NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_create(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test gcmz_lua_destroy with NULL
   gcmz_lua_destroy(NULL); // Should not crash
@@ -197,8 +187,7 @@ static void test_null_pointer_handling(void) {
   TEST_CHECK(L == NULL);
 
   // Create a valid context for additional tests
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
@@ -217,8 +206,7 @@ static void test_memory_leak_detection(void) {
     struct gcmz_lua_context *ctx = NULL;
     struct ov_error err = {0};
 
-    if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
       return;
     }
 
@@ -249,14 +237,11 @@ static void test_lua_state_creation_failure(void) {
 
   // Test with already initialized context pointer (should fail)
   struct gcmz_lua_context *ctx = (struct gcmz_lua_context *)0x1;
-  TEST_CHECK(!gcmz_lua_create(&ctx, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_create(&ctx, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test normal creation to ensure it still works
   ctx = NULL;
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
   if (!TEST_CHECK(ctx != NULL)) {
@@ -274,8 +259,7 @@ static void test_context_state_after_destruction(void) {
   struct ov_error err = {0};
 
   // Create context
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
@@ -307,42 +291,43 @@ static void test_script_dir_parameter(void) {
   lua_State *L = NULL;
 
   // Test with NULL script_dir (should fail - script_dir is required)
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  TEST_CHECK(!gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = NULL}, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = NULL}, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
   gcmz_lua_destroy(&ctx);
 
   // Test with empty string script_dir (should fail - script_dir is required)
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  TEST_CHECK(!gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = L""}, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = L""}, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
   gcmz_lua_destroy(&ctx);
 
   // Test with non-existent directory (should fail - entrypoint.lua not found)
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  TEST_CHECK(!gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = L"C:\\NonExistentDirectory"}, &err));
-  OV_ERROR_DESTROY(&err);
+  // This should fail but we don't check specific error type
+  // gcmz_lua_setup fails because require('entrypoint') fails
+  TEST_FAILED_WITH(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = L"C:\\NonExistentDirectory"}, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_fail);
   gcmz_lua_destroy(&ctx);
 
   // Test with valid directory containing entrypoint.lua (should succeed)
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_CHECK(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err))) {
+  if (!TEST_SUCCEEDED(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err), &err)) {
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
@@ -362,15 +347,9 @@ static void test_multiple_contexts(void) {
   struct ov_error err3 = {0};
 
   // Create multiple contexts
-  if (!TEST_CHECK(gcmz_lua_create(&ctx1, &err1))) {
-    OV_ERROR_DESTROY(&err1);
-  }
-  if (!TEST_CHECK(gcmz_lua_create(&ctx2, &err2))) {
-    OV_ERROR_DESTROY(&err2);
-  }
-  if (!TEST_CHECK(gcmz_lua_create(&ctx3, &err3))) {
-    OV_ERROR_DESTROY(&err3);
-  }
+  TEST_SUCCEEDED(gcmz_lua_create(&ctx1, &err1), &err1);
+  TEST_SUCCEEDED(gcmz_lua_create(&ctx2, &err2), &err2);
+  TEST_SUCCEEDED(gcmz_lua_create(&ctx3, &err3), &err3);
 
   if (!ctx1 || !ctx2 || !ctx3) {
     gcmz_lua_destroy(&ctx1);
@@ -426,33 +405,29 @@ static void test_hook_functions_null_context(void) {
   struct ov_error err = {0};
 
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Add a test file
-  if (!TEST_CHECK(gcmz_file_list_add(file_list, L"C:\\test\\file.txt", L"text/plain", &err))) {
+  if (!TEST_SUCCEEDED(gcmz_file_list_add(file_list, L"C:\\test\\file.txt", L"text/plain", &err), &err)) {
     gcmz_file_list_destroy(&file_list);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
   // Test all hook functions with NULL context (should return error)
-  if (TEST_CHECK(!gcmz_lua_call_drag_enter(NULL, file_list, 0, 0, false, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_lua_call_drag_enter(NULL, file_list, 0, 0, false, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
-  if (TEST_CHECK(!gcmz_lua_call_drag_leave(NULL, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(
+      gcmz_lua_call_drag_leave(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
-  if (TEST_CHECK(!gcmz_lua_call_drop(NULL, file_list, 0, 0, false, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_lua_call_drop(NULL, file_list, 0, 0, false, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   gcmz_file_list_destroy(&file_list);
 }
@@ -461,33 +436,42 @@ static void test_hook_functions_no_modules(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!gcmz_lua_create(&ctx, &err)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   struct gcmz_file_list *file_list = NULL;
   file_list = gcmz_file_list_create(&err);
-  if (!file_list) {
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
   // Add a test file
-  if (!gcmz_file_list_add(file_list, L"C:\\test\\file.txt", L"text/plain", &err)) {
+  if (!TEST_SUCCEEDED(gcmz_file_list_add(file_list, L"C:\\test\\file.txt", L"text/plain", &err), &err)) {
     gcmz_file_list_destroy(&file_list);
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
   // Test hook functions with valid context but no modules (should succeed)
-  TEST_CHECK(gcmz_lua_call_drag_enter(ctx, file_list, 0, 0, false, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_enter(ctx, file_list, 0, 0, false, &err), &err)) {
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
-  TEST_CHECK(gcmz_lua_call_drag_leave(ctx, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_leave(ctx, &err), &err)) {
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
-  TEST_CHECK(gcmz_lua_call_drop(ctx, file_list, 0, 0, false, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drop(ctx, file_list, 0, 0, false, &err), &err)) {
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   gcmz_file_list_destroy(&file_list);
   gcmz_lua_destroy(&ctx);
@@ -497,24 +481,24 @@ static void test_hook_functions_null_file_list(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!gcmz_lua_create(&ctx, &err)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   // Test hook functions that require file_list with NULL
-  if (TEST_CHECK(!gcmz_lua_call_drag_enter(ctx, NULL, 0, 0, false, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_lua_call_drag_enter(ctx, NULL, 0, 0, false, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
-  if (TEST_CHECK(!gcmz_lua_call_drop(ctx, NULL, 0, 0, false, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(
+      gcmz_lua_call_drop(ctx, NULL, 0, 0, false, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test hook functions that don't require file_list (should succeed)
-  TEST_CHECK(gcmz_lua_call_drag_leave(ctx, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_leave(ctx, &err), &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   gcmz_lua_destroy(&ctx);
 }
@@ -523,41 +507,50 @@ static void test_drag_session_workflow(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!gcmz_lua_create(&ctx, &err)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   struct gcmz_file_list *file_list = NULL;
   file_list = gcmz_file_list_create(&err);
-  if (!file_list) {
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
   // Add test files
-  if (!gcmz_file_list_add(file_list, L"C:\\test\\file1.psd", L"image/vnd.adobe.photoshop", &err)) {
+  if (!TEST_SUCCEEDED(gcmz_file_list_add(file_list, L"C:\\test\\file1.psd", L"image/vnd.adobe.photoshop", &err),
+                      &err)) {
     gcmz_file_list_destroy(&file_list);
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
-  if (!gcmz_file_list_add(file_list, L"C:\\test\\file2.txt", L"text/plain", &err)) {
+  if (!TEST_SUCCEEDED(gcmz_file_list_add(file_list, L"C:\\test\\file2.txt", L"text/plain", &err), &err)) {
     gcmz_file_list_destroy(&file_list);
     gcmz_lua_destroy(&ctx);
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
   // Simulate complete drag session
-  TEST_CHECK(gcmz_lua_call_drag_enter(ctx, file_list, 0x08, 0, false, &err)); // MK_CONTROL
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_enter(ctx, file_list, 0x08, 0, false, &err), &err)) { // MK_CONTROL
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
-  TEST_CHECK(gcmz_lua_call_drop(ctx, file_list, 0x10, 0, false, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drop(ctx, file_list, 0x10, 0, false, &err), &err)) {
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   // Test drag_leave after drop (should still work)
-  TEST_CHECK(gcmz_lua_call_drag_leave(ctx, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_leave(ctx, &err), &err)) {
+    gcmz_file_list_destroy(&file_list);
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   gcmz_file_list_destroy(&file_list);
   gcmz_lua_destroy(&ctx);
@@ -567,14 +560,12 @@ static void test_add_handler_script(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   // Setup context first (required for add_handler_script to work with new design)
-  if (!TEST_CHECK(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -592,7 +583,10 @@ static void test_add_handler_script(void) {
                         "  drop = function(files, state) end\n"
                         "}\n";
 
-  TEST_CHECK(gcmz_lua_add_handler_script(ctx, "test_module", script, sizeof(script) - 1, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_add_handler_script(ctx, "test_module", script, sizeof(script) - 1, &err), &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   // Verify module was added via entrypoint.get_module_count()
   lua_getglobal(L, "require");
@@ -656,14 +650,12 @@ static void test_add_handler_script_priority_sorting(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   // Setup context first (required for add_handler_script to work with new design)
-  if (!TEST_CHECK(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -679,9 +671,21 @@ static void test_add_handler_script_priority_sorting(void) {
   char const script_high[] = "return { priority = 100 }";
   char const script_mid[] = "return { priority = 500 }";
 
-  TEST_CHECK(gcmz_lua_add_handler_script(ctx, "low_priority", script_low, sizeof(script_low) - 1, &err));
-  TEST_CHECK(gcmz_lua_add_handler_script(ctx, "high_priority", script_high, sizeof(script_high) - 1, &err));
-  TEST_CHECK(gcmz_lua_add_handler_script(ctx, "mid_priority", script_mid, sizeof(script_mid) - 1, &err));
+  if (!TEST_SUCCEEDED(gcmz_lua_add_handler_script(ctx, "low_priority", script_low, sizeof(script_low) - 1, &err),
+                      &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_lua_add_handler_script(ctx, "high_priority", script_high, sizeof(script_high) - 1, &err),
+                      &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_lua_add_handler_script(ctx, "mid_priority", script_mid, sizeof(script_mid) - 1, &err),
+                      &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
 
   // Get entrypoint module
   lua_getglobal(L, "require");
@@ -744,44 +748,53 @@ static void test_add_handler_script_invalid_args(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   // Test with NULL context
-  TEST_CHECK(!gcmz_lua_add_handler_script(NULL, "name", "return {}", 9, &err));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(NULL, "name", "return {}", 9, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test with NULL name (before setup - should fail with invalid_argument)
-  TEST_CHECK(!gcmz_lua_add_handler_script(ctx, NULL, "return {}", 9, &err));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(ctx, NULL, "return {}", 9, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test with NULL script (before setup - should fail with invalid_argument)
-  TEST_CHECK(!gcmz_lua_add_handler_script(ctx, "name", NULL, 0, &err));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(ctx, "name", NULL, 0, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test before setup (entrypoint_ref == LUA_NOREF - should fail with invalid_argument)
-  TEST_CHECK(!gcmz_lua_add_handler_script(ctx, "name", "return {}", 9, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(ctx, "name", "return {}", 9, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Setup context for remaining tests
-  if (!TEST_CHECK(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
 
   // Test with script that doesn't return a table
   char const script_not_table[] = "return 'not a table'";
-  TEST_CHECK(!gcmz_lua_add_handler_script(ctx, "name", script_not_table, sizeof(script_not_table) - 1, &err));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(ctx, "name", script_not_table, sizeof(script_not_table) - 1, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_fail);
 
   // Test with invalid Lua syntax
   char const script_invalid[] = "invalid lua code }";
-  TEST_CHECK(!gcmz_lua_add_handler_script(ctx, "name", script_invalid, sizeof(script_invalid) - 1, &err));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_lua_add_handler_script(ctx, "name", script_invalid, sizeof(script_invalid) - 1, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_fail);
 
   gcmz_lua_destroy(&ctx);
 }
@@ -791,20 +804,18 @@ static void test_lua_setup(void) {
   struct ov_error err = {0};
 
   // Create context without options
-  if (!TEST_CHECK(gcmz_lua_create(&ctx, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
 
   // Test setup with NULL context
-  if (TEST_CHECK(!gcmz_lua_setup(NULL, &(struct gcmz_lua_options){0}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_lua_setup(NULL, &(struct gcmz_lua_options){0}, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test setup with NULL options (should fail)
-  if (TEST_CHECK(!gcmz_lua_setup(ctx, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_lua_setup(ctx, NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   gcmz_lua_destroy(&ctx);
 }

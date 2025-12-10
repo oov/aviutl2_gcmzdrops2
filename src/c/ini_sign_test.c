@@ -72,20 +72,16 @@ static void test_sign_and_verify_basic(void) {
   wchar_t const test_ini[] = TEST_PATH(L"ini_sign/test_basic.ini");
   wchar_t const temp_ini[] = L"test_temp_signed.ini";
 
-  if (!TEST_CHECK(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, test_ini, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_sign(reader, secret_key, signature, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_sign(reader, secret_key, signature, &err), &err)) {
     goto cleanup;
   }
 
@@ -95,22 +91,18 @@ static void test_sign_and_verify_basic(void) {
   }
   signature_hex[gcmz_sign_signature_size * 2] = '\0';
 
-  if (!TEST_CHECK(create_test_ini_with_signature(temp_ini, signature_hex, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(create_test_ini_with_signature(temp_ini, signature_hex, &err), &err)) {
     goto cleanup;
   }
 
   gcmz_ini_reader_destroy(&reader);
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, temp_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, temp_ini, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_sign_verify(reader, public_key, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_sign_verify(reader, public_key, &err), &err)) {
     goto cleanup;
   }
 
@@ -132,24 +124,19 @@ static void test_verify_wrong_key(void) {
   wchar_t const *const test_ini = TEST_PATH(L"ini_sign/test_basic.ini");
   wchar_t const temp_ini[] = L"test_temp_wrong_key.ini";
 
-  if (!TEST_CHECK(ovl_crypto_sign_generate_keypair(public_key1, secret_key1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(ovl_crypto_sign_generate_keypair(public_key1, secret_key1, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(ovl_crypto_sign_generate_keypair(public_key2, secret_key2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(ovl_crypto_sign_generate_keypair(public_key2, secret_key2, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, test_ini, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_sign(reader, secret_key1, signature, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_sign(reader, secret_key1, signature, &err), &err)) {
     goto cleanup;
   }
 
@@ -159,22 +146,17 @@ static void test_verify_wrong_key(void) {
   }
   signature_hex[gcmz_sign_signature_size * 2] = '\0';
 
-  if (!TEST_CHECK(create_test_ini_with_signature(temp_ini, signature_hex, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(create_test_ini_with_signature(temp_ini, signature_hex, &err), &err)) {
     goto cleanup;
   }
   gcmz_ini_reader_destroy(&reader);
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, temp_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, temp_ini, &err), &err)) {
     goto cleanup;
   }
-  if (TEST_CHECK(!gcmz_sign_verify(reader, public_key2, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_sign_verify(reader, public_key2, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
 cleanup:
   if (reader) {
@@ -191,27 +173,20 @@ static void test_error_cases(void) {
   uint8_t signature[gcmz_sign_signature_size];
   wchar_t const *const test_ini = TEST_PATH(L"ini_sign/test_no_updated_at.ini");
 
-  if (!TEST_CHECK(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err), &err)) {
     goto cleanup;
   }
-  if (TEST_CHECK(!gcmz_sign(NULL, secret_key, signature, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(!gcmz_sign_verify(NULL, public_key, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      gcmz_sign(NULL, secret_key, signature, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(
+      gcmz_sign_verify(NULL, public_key, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, test_ini, &err), &err)) {
     goto cleanup;
   }
-  if (TEST_CHECK(!gcmz_sign(reader, secret_key, signature, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_sign(reader, secret_key, signature, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
 cleanup:
   if (reader) {
@@ -260,20 +235,17 @@ static void test_build_canonical_data(void) {
   size_t section_count = 0;
   wchar_t const *const test_ini = TEST_PATH(L"ini_sign/test_basic.ini");
 
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, test_ini, &err), &err)) {
     goto cleanup;
   }
 
   section_count = gcmz_ini_reader_get_section_count(reader);
   TEST_CHECK(section_count > 0);
 
-  if (!TEST_CHECK(build_canonical_data(reader, &canonical_data, &canonical_data_size, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(build_canonical_data(reader, &canonical_data, &canonical_data_size, &err), &err)) {
     goto cleanup;
   }
 
@@ -314,13 +286,11 @@ static void test_ini_reader_basic(void) {
   struct gcmz_ini_value updated_at = {0};
   wchar_t const *const test_ini = TEST_PATH(L"ini_sign/test_basic.ini");
 
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, test_ini, &err), &err)) {
     goto cleanup;
   }
 
@@ -347,34 +317,27 @@ static void test_canonical_data_consistency(void) {
   uint8_t signature2[gcmz_sign_signature_size];
   wchar_t const *const test_ini = TEST_PATH(L"ini_sign/test_basic.ini");
 
-  if (!TEST_CHECK(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(ovl_crypto_sign_generate_keypair(public_key, secret_key, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader1, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader2, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader1, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader1, test_ini, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader2, test_ini, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader2, test_ini, &err), &err)) {
     goto cleanup;
   }
 
   // Sign both - should produce identical signatures
-  if (!TEST_CHECK(gcmz_sign(reader1, secret_key, signature1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_sign(reader1, secret_key, signature1, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_sign(reader2, secret_key, signature2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_sign(reader2, secret_key, signature2, &err), &err)) {
     goto cleanup;
   }
 

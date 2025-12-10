@@ -31,8 +31,7 @@ static void reset_test_state(void) {
 static void test_tray_create_destroy(void) {
   struct ov_error err = {0};
   struct gcmz_tray *tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     return;
   }
   gcmz_tray_destroy(&tray);
@@ -42,8 +41,7 @@ static void test_tray_create_destroy(void) {
 static void test_tray_window_exists(void) {
   struct ov_error err = {0};
   struct gcmz_tray *tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     return;
   }
   TEST_CHECK(FindWindowW(L"GCMZDropsTrayWindow", NULL) != NULL);
@@ -60,12 +58,10 @@ static void test_tray_add_menu_item(void) {
   g_menu_enabled = true;
 
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err), &err)) {
     goto cleanup;
   }
 
@@ -82,13 +78,11 @@ static void test_tray_add_multiple_menu_items(void) {
   g_menu_enabled = true;
 
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
   for (int i = 0; i < 10; i++) {
-    if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err))) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err), &err)) {
       goto cleanup;
     }
   }
@@ -106,12 +100,10 @@ static void test_tray_remove_menu_item(void) {
   g_menu_enabled = true;
 
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err), &err)) {
     goto cleanup;
   }
   gcmz_tray_remove_menu_item(tray, test_callback);
@@ -135,20 +127,16 @@ static void test_tray_remove_specific_menu_item(void) {
   g_menu_enabled = true;
 
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback_2, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback_2, NULL, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_tray_add_menu_item(tray, test_callback, NULL, &err), &err)) {
     goto cleanup;
   }
   gcmz_tray_remove_menu_item(tray, test_callback);
@@ -164,19 +152,18 @@ static void test_tray_invalid_arguments(void) {
   struct gcmz_tray *tray = NULL;
 
   TEST_CASE("NULL tray");
-  if (TEST_CHECK(!gcmz_tray_add_menu_item(NULL, test_callback, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_tray_add_menu_item(NULL, test_callback, NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   TEST_CASE("NULL callback");
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
-  if (TEST_CHECK(!gcmz_tray_add_menu_item(tray, NULL, NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(
+      gcmz_tray_add_menu_item(tray, NULL, NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
   gcmz_tray_destroy(&tray);
 
   TEST_CASE("NULL tray for remove");
@@ -184,8 +171,7 @@ static void test_tray_invalid_arguments(void) {
 
   TEST_CASE("NULL callback for remove");
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
   gcmz_tray_remove_menu_item(tray, NULL);
@@ -205,8 +191,7 @@ static void test_tray_rapid_create_destroy(void) {
 
   for (int i = 0; i < 5; i++) {
     struct gcmz_tray *tray = gcmz_tray_create(NULL, &err);
-    if (!TEST_CHECK(tray != NULL)) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(tray != NULL, &err)) {
       return;
     }
     TEST_CHECK(FindWindowW(L"GCMZDropsTrayWindow", NULL) != NULL);
@@ -232,8 +217,7 @@ static void test_tray_add_menu_item_with_null_err(void) {
   g_menu_enabled = true;
 
   tray = gcmz_tray_create(NULL, &err);
-  if (!TEST_CHECK(tray != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(tray != NULL, &err)) {
     goto cleanup;
   }
   TEST_CHECK(gcmz_tray_add_menu_item(tray, test_callback, NULL, NULL));

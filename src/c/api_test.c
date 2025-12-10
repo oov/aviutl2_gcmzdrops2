@@ -41,9 +41,7 @@ static void test_notify_update(struct gcmz_api *const api, void *const userdata)
   };
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &test_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &test_data, &err), &err);
 }
 
 // Test request callback context
@@ -103,8 +101,7 @@ static void test_api_create_destroy(void) {
           .userdata = NULL,
       },
       &err);
-  if (!TEST_CHECK(api != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(api != NULL, &err)) {
     return;
   }
 
@@ -141,8 +138,7 @@ static void test_api_callback_setting(void) {
           .userdata = &ctx,
       },
       &err);
-  if (!TEST_CHECK(api != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(api != NULL, &err)) {
     return;
   }
 
@@ -156,8 +152,7 @@ static void test_file_list_operations(void) {
 
   // Test creation
   list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(list != NULL, &err)) {
     return;
   }
 
@@ -165,9 +160,7 @@ static void test_file_list_operations(void) {
   TEST_CHECK(gcmz_file_list_count(list) == 0);
 
   // Test adding file
-  if (!TEST_CHECK(gcmz_file_list_add(list, L"C:\\test\\file1.txt", L"text/plain", &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_file_list_add(list, L"C:\\test\\file1.txt", L"text/plain", &err), &err);
   TEST_CHECK(gcmz_file_list_count(list) == 1);
 
   // Test getting file
@@ -182,9 +175,7 @@ static void test_file_list_operations(void) {
   }
 
   // Test adding temporary file
-  if (!TEST_CHECK(gcmz_file_list_add_temporary(list, L"C:\\temp\\temp1.tmp", L"application/octet-stream", &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_file_list_add_temporary(list, L"C:\\temp\\temp1.tmp", L"application/octet-stream", &err), &err);
   TEST_CHECK(gcmz_file_list_count(list) == 2);
 
   // Test getting temporary file
@@ -197,9 +188,7 @@ static void test_file_list_operations(void) {
   }
 
   // Test removing file
-  if (!TEST_CHECK(gcmz_file_list_remove(list, 0, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_file_list_remove(list, 0, &err), &err);
   TEST_CHECK(gcmz_file_list_count(list) == 1);
 
   // Test out of bounds access
@@ -222,16 +211,13 @@ static void test_security_validation(void) {
   struct ov_error err = {0};
 
   list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(list != NULL, &err)) {
     return;
   }
 
   // Test path traversal detection - these should fail in actual security validation
   // For now, we just test that files can be added (security validation may be separate)
-  if (!TEST_CHECK(gcmz_file_list_add(list, L"C:\\test\\normalfile.txt", L"text/plain", &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_file_list_add(list, L"C:\\test\\normalfile.txt", L"text/plain", &err), &err);
   gcmz_file_list_destroy(&list);
 }
 
@@ -255,16 +241,16 @@ static void test_error_handling(void) {
 
   // Test with valid err parameter but NULL path
   list = gcmz_file_list_create(&err);
-  if (list) {
-    if (TEST_CHECK(!gcmz_file_list_add(list, NULL, L"text/plain", &err))) {
-      OV_ERROR_DESTROY(&err);
-    }
-
-    gcmz_file_list_destroy(&list);
-    TEST_CHECK(list == NULL);
-  } else {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(list != NULL, &err)) {
+    return;
   }
+  TEST_FAILED_WITH(gcmz_file_list_add(list, NULL, L"text/plain", &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+
+  gcmz_file_list_destroy(&list);
+  TEST_CHECK(list == NULL);
 }
 
 // Test thread safety and window management
@@ -286,8 +272,7 @@ static void test_thread_management(void) {
           .userdata = &ctx,
       },
       &err);
-  if (!TEST_CHECK(api != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(api != NULL, &err)) {
     return;
   }
 
@@ -306,8 +291,7 @@ static void test_api_structures(void) {
   struct ov_error err = {0};
 
   params.files = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(params.files != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(params.files != NULL, &err)) {
     return;
   }
 
@@ -342,8 +326,7 @@ static void test_multiple_data_sets(void) {
           .userdata = NULL,
       },
       &err);
-  if (!TEST_CHECK(api != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(api != NULL, &err)) {
     return;
   }
 
@@ -363,9 +346,7 @@ static void test_multiple_data_sets(void) {
       .project_path = L"C:\\first\\project\\path.aup",
   };
 
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &first_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &first_data, &err), &err);
 
   // Second data set with different path length
   struct gcmz_project_data second_data = {
@@ -383,9 +364,7 @@ static void test_multiple_data_sets(void) {
       .project_path = L"C:\\very\\long\\second\\project\\path\\with\\many\\subdirectories\\test.aup",
   };
 
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &second_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &second_data, &err), &err);
 
   // Third data set with shorter path
   struct gcmz_project_data third_data = {
@@ -403,9 +382,7 @@ static void test_multiple_data_sets(void) {
       .project_path = L"C:\\short.aup",
   };
 
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &third_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &third_data, &err), &err);
 
   // Fourth data set with NULL path (should reuse buffer)
   struct gcmz_project_data null_path_data = {
@@ -423,9 +400,7 @@ static void test_multiple_data_sets(void) {
       .project_path = NULL,
   };
 
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &null_path_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &null_path_data, &err), &err);
 
   // Fifth data set with path again (should work after NULL)
   struct gcmz_project_data final_data = {
@@ -443,9 +418,7 @@ static void test_multiple_data_sets(void) {
       .project_path = L"C:\\final\\project.aup",
   };
 
-  if (!TEST_CHECK(gcmz_api_set_project_data(api, &final_data, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_api_set_project_data(api, &final_data, &err), &err);
 
   gcmz_api_destroy(&api);
 }

@@ -14,10 +14,7 @@ static void check_data_uri_result(wchar_t const *data_uri,
                                   size_t expected_decoded_len) {
   struct gcmz_data_uri d = {0};
   struct ov_error err = {0};
-  bool result = gcmz_data_uri_parse(data_uri, wcslen(data_uri), &d, &err);
-  TEST_CHECK(result);
-  if (!result) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(data_uri, wcslen(data_uri), &d, &err), &err)) {
     return;
   }
   if (expected_mime) {
@@ -37,10 +34,7 @@ static void check_data_uri_result(wchar_t const *data_uri,
     TEST_CHECK(d.ext_filename[0] == L'\0');
   }
   TEST_CHECK(d.encoding == expected_encoding);
-  result = gcmz_data_uri_decode(&d, &err);
-  TEST_CHECK(result);
-  if (!result) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_decode(&d, &err), &err)) {
     gcmz_data_uri_destroy(&d);
     return;
   }
@@ -111,30 +105,23 @@ static void test_invalid_data_uris(void) {
   struct ov_error err = {0};
 
   TEST_CASE("Missing data: prefix");
-  if (!TEST_CHECK(!gcmz_data_uri_parse(L"hello,world", 11, &d, &err))) {
-    goto cleanup;
-  }
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      gcmz_data_uri_parse(L"hello,world", 11, &d, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
   TEST_CASE("Missing comma separator");
-  if (!TEST_CHECK(!gcmz_data_uri_parse(L"data:text/plain", 15, &d, &err))) {
-    goto cleanup;
-  }
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      gcmz_data_uri_parse(L"data:text/plain", 15, &d, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
   TEST_CASE("NULL pointer");
-  if (!TEST_CHECK(!gcmz_data_uri_parse(NULL, 0, &d, &err))) {
-    goto cleanup;
-  }
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      gcmz_data_uri_parse(NULL, 0, &d, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   TEST_CASE("NULL destination");
-  if (!TEST_CHECK(!gcmz_data_uri_parse(L"data:,hello", 11, NULL, &err))) {
-    goto cleanup;
-  }
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_data_uri_parse(L"data:,hello", 11, NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
-cleanup:
   gcmz_data_uri_destroy(&d);
 }
 
@@ -142,13 +129,10 @@ static void test_invalid_base64(void) {
   struct gcmz_data_uri d = {0};
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_data_uri_parse(L"data:text/plain;base64,Invalid@Base64!", 39, &d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(L"data:text/plain;base64,Invalid@Base64!", 39, &d, &err), &err)) {
     goto cleanup;
   }
-  if (TEST_CHECK(!gcmz_data_uri_decode(&d, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_data_uri_decode(&d, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
 cleanup:
   gcmz_data_uri_destroy(&d);
@@ -161,12 +145,10 @@ static void test_suggest_filename(void) {
   struct ov_error err = {0};
 
   TEST_CASE("with explicit filename");
-  if (!TEST_CHECK(gcmz_data_uri_parse(L"data:text/plain;filename=test.txt,Hello", 40, &d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(L"data:text/plain;filename=test.txt,Hello", 40, &d, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_data_uri_suggest_filename(&d, &filename1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_suggest_filename(&d, &filename1, &err), &err)) {
     goto cleanup;
   }
   if (!TEST_CHECK(wcscmp(filename1, L"test.txt") == 0)) {
@@ -175,16 +157,13 @@ static void test_suggest_filename(void) {
   gcmz_data_uri_destroy(&d);
 
   TEST_CASE("with mime type extension");
-  if (!TEST_CHECK(gcmz_data_uri_parse(L"data:image/png;base64,iVBORw0KGgo=", 32, &d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(L"data:image/png;base64,iVBORw0KGgo=", 32, &d, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_data_uri_decode(&d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_decode(&d, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_data_uri_suggest_filename(&d, &filename2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_suggest_filename(&d, &filename2, &err), &err)) {
     goto cleanup;
   }
   {
@@ -211,12 +190,10 @@ static void test_get_mime(void) {
   struct ov_error err = {0};
 
   TEST_CASE("text/html with charset");
-  if (!TEST_CHECK(gcmz_data_uri_parse(L"data:text/html;charset=utf-8,<html></html>", 42, &d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(L"data:text/html;charset=utf-8,<html></html>", 42, &d, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_data_uri_get_mime(&d, &mime1, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_get_mime(&d, &mime1, &err), &err)) {
     goto cleanup;
   }
   if (!TEST_CHECK(wcscmp(mime1, L"text/html; charset=utf-8") == 0)) {
@@ -225,12 +202,10 @@ static void test_get_mime(void) {
   gcmz_data_uri_destroy(&d);
 
   TEST_CASE("image/png");
-  if (!TEST_CHECK(gcmz_data_uri_parse(L"data:image/png;base64,iVBORw0KGgo=", 32, &d, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_parse(L"data:image/png;base64,iVBORw0KGgo=", 32, &d, &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_data_uri_get_mime(&d, &mime2, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_data_uri_get_mime(&d, &mime2, &err), &err)) {
     goto cleanup;
   }
   if (!TEST_CHECK(wcscmp(mime2, L"image/png") == 0)) {

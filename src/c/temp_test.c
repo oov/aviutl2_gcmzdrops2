@@ -34,8 +34,7 @@ static void test_cleanup(void) { gcmz_temp_remove_directory(); }
 static void test_gcmz_temp_create_unique_file_success(void) {
   wchar_t *temp_file = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_temp_create_unique_file(L"temp.txt", &temp_file, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"temp.txt", &temp_file, &err), &err)) {
     return;
   }
 
@@ -66,7 +65,7 @@ static void test_gcmz_temp_create_unique_file_edge_cases(void) {
   struct ov_error err = {0};
 
   // Test very long extension
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L"test.verylongextension", &file1, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"test.verylongextension", &file1, &err), &err)) {
     if (TEST_CHECK(file1 != NULL)) {
       TEST_CHECK(wcsstr(file1, L".verylongextension") != NULL);
       TEST_CHECK(wcsstr(file1, L"test_") != NULL);
@@ -74,14 +73,14 @@ static void test_gcmz_temp_create_unique_file_edge_cases(void) {
   }
 
   // Test no extension
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L"noextension", &file2, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"noextension", &file2, &err), &err)) {
     if (TEST_CHECK(file2 != NULL)) {
       TEST_CHECK(wcsstr(file2, L"noextension_") != NULL);
     }
   }
 
   // Test very long filename
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L"verylongfilenamethatexceedstypiclimits.txt", &file3, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"verylongfilenamethatexceedstypiclimits.txt", &file3, &err), &err)) {
     if (TEST_CHECK(file3 != NULL)) {
       TEST_CHECK(wcsstr(file3, L".txt") != NULL);
       TEST_CHECK(wcsstr(file3, L"verylongfilenamethatexceedstypiclimits_") != NULL);
@@ -89,7 +88,7 @@ static void test_gcmz_temp_create_unique_file_edge_cases(void) {
   }
 
   // Test single character filename
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L"a.b", &file4, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"a.b", &file4, &err), &err)) {
     if (TEST_CHECK(file4 != NULL)) {
       TEST_CHECK(wcsstr(file4, L".b") != NULL);
       TEST_CHECK(wcsstr(file4, L"a_") != NULL);
@@ -163,7 +162,7 @@ static void test_gcmz_temp_create_unique_file_uniqueness(void) {
   struct ov_error err = {0};
 
   for (int i = 0; i < 10; ++i) {
-    if (TEST_CHECK(gcmz_temp_create_unique_file(L"test.tmp", &files[i], &err))) {
+    if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"test.tmp", &files[i], &err), &err)) {
       if (TEST_CHECK(files[i] != NULL)) {
         // Verify file exists
         HANDLE hFile = CreateFileW(files[i], GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -198,9 +197,10 @@ static void test_gcmz_temp_create_unique_file_uniqueness(void) {
 static void test_gcmz_temp_create_unique_file_error_handling(void) {
   // Test with NULL dest_path
   struct ov_error err = {0};
-  TEST_CHECK(!gcmz_temp_create_unique_file(L"test.txt", NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_temp_create_unique_file(L"test.txt", NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 }
 
 static void test_gcmz_temp_create_unique_file_default_filename(void) {
@@ -209,7 +209,7 @@ static void test_gcmz_temp_create_unique_file_default_filename(void) {
   struct ov_error err = {0};
 
   // Test with NULL filename (should use "tmp.bin")
-  if (TEST_CHECK(gcmz_temp_create_unique_file(NULL, &temp_file1, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(NULL, &temp_file1, &err), &err)) {
     if (TEST_CHECK(temp_file1 != NULL)) {
       TEST_CHECK(wcsstr(temp_file1, L"tmp_") != NULL);
       TEST_CHECK(wcsstr(temp_file1, L".bin") != NULL);
@@ -217,7 +217,7 @@ static void test_gcmz_temp_create_unique_file_default_filename(void) {
   }
 
   // Test with empty string filename (should use "tmp.bin")
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L"", &temp_file2, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"", &temp_file2, &err), &err)) {
     if (TEST_CHECK(temp_file2 != NULL)) {
       TEST_CHECK(wcsstr(temp_file2, L"tmp_") != NULL);
       TEST_CHECK(wcsstr(temp_file2, L".bin") != NULL);
@@ -257,7 +257,7 @@ static void test_gcmz_temp_create_unique_file_dot_filenames(void) {
   struct ov_error err = {0};
 
   // Test with dot at start (hidden file style)
-  if (TEST_CHECK(gcmz_temp_create_unique_file(L".gitignore", &temp_file, &err))) {
+  if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L".gitignore", &temp_file, &err), &err)) {
     if (TEST_CHECK(temp_file != NULL)) {
       // Should use ".gitignore" as basename since dot-prefixed files are treated as basenames
       TEST_CHECK(wcsstr(temp_file, L".gitignore_") != NULL);

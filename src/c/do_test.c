@@ -27,9 +27,8 @@ static void test_init_with_null_window(void) {
   cleanup_test_window();
   struct ov_error err = {0};
 
-  TEST_CHECK(!gcmz_do_init(&(struct gcmz_do_init_option){0}, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_fail));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      gcmz_do_init(&(struct gcmz_do_init_option){0}, &err), &err, ov_error_type_generic, ov_error_generic_fail);
 
   cleanup_test_window();
 }
@@ -48,9 +47,10 @@ static void test_init_with_invalid_window(void) {
   cleanup_test_window();
   struct ov_error err = {0};
 
-  TEST_CHECK(!gcmz_do_init(&(struct gcmz_do_init_option){.window = (void *)0x12345678}, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_fail));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_do_init(&(struct gcmz_do_init_option){.window = (void *)0x12345678}, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_fail);
 
   cleanup_test_window();
 }
@@ -60,9 +60,7 @@ static void test_init_success(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   gcmz_do_exit();
   cleanup_test_window();
@@ -73,13 +71,9 @@ static void test_double_init(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   gcmz_do_exit();
   cleanup_test_window();
@@ -96,9 +90,7 @@ static void test_exit_after_init(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   gcmz_do_exit();
   cleanup_test_window();
@@ -109,9 +101,7 @@ static void test_double_exit(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   gcmz_do_exit();
   gcmz_do_exit();
@@ -145,9 +135,7 @@ static void test_do_with_null_func(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   g_test_func_call_count = 0;
   gcmz_do(NULL, (void *)0x12345);
@@ -163,9 +151,7 @@ static void test_do_same_thread(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   g_test_func_call_count = 0;
   g_test_func_data = NULL;
@@ -198,9 +184,7 @@ static void test_do_blocking_with_null_func(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   g_test_func_call_count = 0;
   gcmz_do_blocking(NULL, (void *)0x12345);
@@ -216,9 +200,7 @@ static void test_do_blocking_same_thread(void) {
   setup_test_window();
 
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_do_init(&(struct gcmz_do_init_option){.window = g_test_window}, &err), &err);
 
   g_test_func_call_count = 0;
   g_test_func_data = NULL;

@@ -350,18 +350,18 @@ static void test_dataobj_source_create_null_params(void) {
   void *dataobj = (void *)0x1; // dummy non-NULL pointer
   FORMATETC formatetc = {0};
 
-  if (TEST_CHECK(!gcmz_dataobj_source_create(NULL, &formatetc, &source, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(!gcmz_dataobj_source_create(dataobj, NULL, &source, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(!gcmz_dataobj_source_create(dataobj, &formatetc, NULL, &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_dataobj_source_create(NULL, &formatetc, &source, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_dataobj_source_create(dataobj, NULL, &source, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
+  TEST_FAILED_WITH(gcmz_dataobj_source_create(dataobj, &formatetc, NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 }
 
 static void test_dataobj_source_create_getdata_fail(void) {
@@ -371,19 +371,19 @@ static void test_dataobj_source_create_getdata_fail(void) {
   if (!TEST_CHECK(mock != NULL)) {
     return;
   }
-  if (TEST_CHECK(!gcmz_dataobj_source_create(&mock->iface,
-                                             &(FORMATETC){
-                                                 .cfFormat = CF_TEXT,
-                                                 .dwAspect = DVASPECT_CONTENT,
-                                                 .lindex = -1,
-                                                 .tymed = TYMED_HGLOBAL,
-                                             },
-                                             &source,
-                                             &err))) {
-    TEST_CHECK(ov_error_is(&err, ov_error_type_hresult, E_FAIL));
-    TEST_CHECK(source == NULL);
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_FAILED_WITH(gcmz_dataobj_source_create(&mock->iface,
+                                              &(FORMATETC){
+                                                  .cfFormat = CF_TEXT,
+                                                  .dwAspect = DVASPECT_CONTENT,
+                                                  .lindex = -1,
+                                                  .tymed = TYMED_HGLOBAL,
+                                              },
+                                              &source,
+                                              &err),
+                   &err,
+                   ov_error_type_hresult,
+                   E_FAIL);
+  TEST_CHECK(source == NULL);
   IDataObject_Release(&mock->iface);
 }
 
@@ -399,16 +399,16 @@ static void verify_source_creation(CLIPFORMAT format, DWORD tymed, char const *t
     goto cleanup;
   }
 
-  if (!TEST_CHECK(gcmz_dataobj_source_create(&mock->iface,
-                                             &(FORMATETC){
-                                                 .cfFormat = format,
-                                                 .dwAspect = DVASPECT_CONTENT,
-                                                 .lindex = -1,
-                                                 .tymed = tymed,
-                                             },
-                                             &source,
-                                             &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_dataobj_source_create(&mock->iface,
+                                                 &(FORMATETC){
+                                                     .cfFormat = format,
+                                                     .dwAspect = DVASPECT_CONTENT,
+                                                     .lindex = -1,
+                                                     .tymed = tymed,
+                                                 },
+                                                 &source,
+                                                 &err),
+                      &err)) {
     goto cleanup;
   }
   if (!TEST_CHECK(source != NULL)) {
@@ -451,16 +451,16 @@ static void verify_source_with_mismatched_tymed(DWORD actual_tymed, CLIPFORMAT f
   if (!TEST_CHECK(mock != NULL)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_dataobj_source_create(&mock->iface,
-                                             &(FORMATETC){
-                                                 .cfFormat = format,
-                                                 .dwAspect = DVASPECT_CONTENT,
-                                                 .lindex = -1,
-                                                 .tymed = requested_tymed,
-                                             },
-                                             &source,
-                                             &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_dataobj_source_create(&mock->iface,
+                                                 &(FORMATETC){
+                                                     .cfFormat = format,
+                                                     .dwAspect = DVASPECT_CONTENT,
+                                                     .lindex = -1,
+                                                     .tymed = requested_tymed,
+                                                 },
+                                                 &source,
+                                                 &err),
+                      &err)) {
     goto cleanup;
   }
   if (!TEST_CHECK(source != NULL)) {

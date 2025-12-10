@@ -385,8 +385,8 @@ static void test_integration_real_images(void) {
       struct gcmz_analyze_metadata metadata = {0};
       int width, height;
       bitmap = NULL;
-      if (!TEST_CHECK(gcmz_analyze_load_png_with_metadata(tc->image_path, &bitmap, &width, &height, &metadata, &err))) {
-        OV_ERROR_DESTROY(&err);
+      if (!TEST_SUCCEEDED(
+              gcmz_analyze_load_png_with_metadata(tc->image_path, &bitmap, &width, &height, &metadata, &err), &err)) {
         continue;
       }
 

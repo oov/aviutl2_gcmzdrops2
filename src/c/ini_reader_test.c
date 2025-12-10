@@ -19,15 +19,11 @@ static void test_create_destroy(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
 
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_ASSERT_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err);
   TEST_ASSERT(reader != NULL);
   gcmz_ini_reader_destroy(&reader);
   gcmz_ini_reader_destroy(NULL);
-  TEST_CHECK(!gcmz_ini_reader_create(NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_ini_reader_create(NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 }
 
 static void check_value_equals(struct gcmz_ini_value result, char const *expected) {
@@ -55,8 +51,7 @@ static void check_value_equals(struct gcmz_ini_value result, char const *expecte
 static void test_key_value_operations(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
@@ -82,13 +77,11 @@ static void test_key_value_operations(void) {
 static void test_basic_parsing(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -120,13 +113,11 @@ static void test_basic_parsing(void) {
 static void test_utf8_bom(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/utf8_bom.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/utf8_bom.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -140,18 +131,16 @@ static void test_utf8_bom(void) {
 static void test_edge_cases(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty.ini"), &err), &err);
 
-  TEST_CHECK(!gcmz_ini_reader_load_file(reader, TEST_PATH(L"nonexistent.ini"), &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_hresult, HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(gcmz_ini_reader_load_file(reader, TEST_PATH(L"nonexistent.ini"), &err),
+                   &err,
+                   ov_error_type_hresult,
+                   HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
 
   gcmz_ini_reader_destroy(&reader);
 }
@@ -159,13 +148,11 @@ static void test_edge_cases(void) {
 static void test_complex_ini(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/complex.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/complex.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -199,13 +186,11 @@ static void test_complex_ini(void) {
 static void test_empty_section(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty_section.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty_section.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -225,13 +210,11 @@ static void test_empty_section(void) {
 static void test_section_iteration(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -274,13 +257,11 @@ static void test_section_iteration(void) {
 static void test_entry_iteration(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/basic.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }
@@ -396,13 +377,11 @@ static void test_entry_iteration(void) {
 static void test_empty_section_iteration(void) {
   struct gcmz_ini_reader *reader = NULL;
   struct ov_error err = {0};
-  if (!TEST_CHECK(gcmz_ini_reader_create(&reader, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_create(&reader, &err), &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty_section.ini"), &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_ini_reader_load_file(reader, TEST_PATH(L"ini_reader/empty_section.ini"), &err), &err)) {
     gcmz_ini_reader_destroy(&reader);
     return;
   }

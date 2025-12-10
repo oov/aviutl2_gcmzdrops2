@@ -16,8 +16,7 @@
 static void test_config_create(void) {
   struct ov_error err = {0};
   struct gcmz_style_config *config = gcmz_style_config_create(NULL, &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -39,8 +38,7 @@ static void test_color_parsing(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -87,8 +85,7 @@ static void test_rgba_parsing(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!config) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -146,8 +143,7 @@ static void test_invalid_colors(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!config) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -190,8 +186,7 @@ static void test_config_override(void) {
           .override_config_path = TEST_PATH(L"style_config/override_config.conf"),
       },
       &err);
-  if (!config) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -243,8 +238,7 @@ static void test_base_config_only(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!config) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -389,8 +383,7 @@ static void test_alpha_blending_edge_cases(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!config) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -418,8 +411,7 @@ static void test_integer_config_loading(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -442,8 +434,7 @@ static void test_integer_override_precedence(void) {
           .override_config_path = TEST_PATH(L"style_config/integer_override_config.conf"),
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 
@@ -466,8 +457,7 @@ static void test_integer_default_fallback(void) {
           .override_config_path = NULL,
       },
       &err);
-  if (!TEST_CHECK(config != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(config != NULL, &err)) {
     return;
   }
 

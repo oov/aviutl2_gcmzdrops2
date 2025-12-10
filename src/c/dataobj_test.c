@@ -118,13 +118,12 @@ static void test_create_temp_file_from_data(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
-  if (!TEST_CHECK(
-          create_temp_file_from_data(test_data, test_data_len, L"test_base.txt", L"text/plain", file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(
+          create_temp_file_from_data(test_data, test_data_len, L"test_base.txt", L"text/plain", file_list, &err),
+          &err)) {
     return;
   }
   TEST_CHECK(gcmz_file_list_count(file_list) == 1);
@@ -159,16 +158,15 @@ static void test_temp_file_uniqueness(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Create multiple temporary files with same base name
   for (int i = 0; i < 5; ++i) {
-    if (!TEST_CHECK(create_temp_file_from_data(
-            test_data, test_data_len, L"unique_test.dat", L"application/octet-stream", file_list, &err))) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(create_temp_file_from_data(
+                            test_data, test_data_len, L"unique_test.dat", L"application/octet-stream", file_list, &err),
+                        &err)) {
       return;
     }
   }
@@ -195,15 +193,15 @@ static void test_cleanup_temporary_files(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   for (int i = 0; i < 3; ++i) {
-    if (!TEST_CHECK(create_temp_file_from_data(
-            test_data, test_data_len, L"cleanup_test.tmp", L"application/octet-stream", file_list, &err))) {
-      OV_ERROR_DESTROY(&err);
+    if (!TEST_SUCCEEDED(
+            create_temp_file_from_data(
+                test_data, test_data_len, L"cleanup_test.tmp", L"application/octet-stream", file_list, &err),
+            &err)) {
       return;
     }
   }
@@ -235,12 +233,12 @@ static void test_cleanup_temporary_files(void) {
   for (int i = 0; i < 3; ++i) {
     struct ovl_file *ovl_f = NULL;
     struct ov_error file_err = {0};
-    bool opened = ovl_file_open(file_paths[i], &ovl_f, &file_err);
-    TEST_CHECK(!opened);
-    if (opened) {
+    if (!TEST_FAILED_WITH(ovl_file_open(file_paths[i], &ovl_f, &file_err),
+                          &file_err,
+                          ov_error_type_hresult,
+                          HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))) {
       ovl_file_close(ovl_f);
     }
-    OV_ERROR_DESTROY(&file_err);
   }
   for (size_t i = 0; i < 3; ++i) {
     struct gcmz_file *file = gcmz_file_list_get_mutable(file_list, i);
@@ -261,29 +259,28 @@ static void test_temp_file_error_handling(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test with NULL data
-  bool ok = create_temp_file_from_data(NULL, 10, L"test.txt", L"text/plain", file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(create_temp_file_from_data(NULL, 10, L"test.txt", L"text/plain", file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test with zero length
   char const test_data[] = "test";
-  ok = create_temp_file_from_data(test_data, 0, L"test.txt", L"text/plain", file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(create_temp_file_from_data(test_data, 0, L"test.txt", L"text/plain", file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test with NULL filename
-  ok = create_temp_file_from_data(test_data, 4, NULL, L"text/plain", file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(create_temp_file_from_data(test_data, 4, NULL, L"text/plain", file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   gcmz_file_list_destroy(&file_list);
 }
@@ -597,14 +594,13 @@ static void test_try_extract_png_format_success(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test PNG extraction
-  if (!TEST_CHECK(try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", file_list, &err),
+                      &err)) {
     return;
   }
 
@@ -654,16 +650,15 @@ static void test_try_extract_png_format_no_png_data(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test PNG extraction when no PNG data is available
-  bool ok = try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_hresult, DV_E_FORMATETC));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", file_list, &err),
+                   &err,
+                   ov_error_type_hresult,
+                   DV_E_FORMATETC);
 
   // Verify no files were created
   TEST_CHECK(gcmz_file_list_count(file_list) == 0);
@@ -681,22 +676,21 @@ static void test_try_extract_png_format_error_handling(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test with NULL dataobj
-  bool ok = try_extract_custom_image_format(NULL, L"PNG", L".png", L"image/png", file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_custom_image_format(NULL, L"PNG", L".png", L"image/png", file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Test with NULL files
-  ok = try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", NULL, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_custom_image_format(&mock->iface, L"PNG", L".png", L"image/png", NULL, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
 
   // Clean up
   gcmz_file_list_destroy(&file_list);
@@ -715,14 +709,12 @@ static void test_try_extract_dib_format_success_24bit(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test DIB extraction
-  if (!TEST_CHECK(try_extract_dib_format(&mock->iface, file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(try_extract_dib_format(&mock->iface, file_list, &err), &err)) {
     return;
   }
 
@@ -775,16 +767,12 @@ static void test_try_extract_dib_format_no_dib_data(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test DIB extraction when no DIB data is available
-  bool ok = try_extract_dib_format(&mock->iface, file_list, &err);
-  TEST_CHECK(!ok);
-  TEST_CHECK(ov_error_is(&err, ov_error_type_hresult, DV_E_FORMATETC));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_dib_format(&mock->iface, file_list, &err), &err, ov_error_type_hresult, DV_E_FORMATETC);
 
   // Verify no files were created
   TEST_CHECK(gcmz_file_list_count(file_list) == 0);
@@ -798,23 +786,22 @@ static void test_try_extract_dib_format_error_handling(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test with NULL dataobj
-  TEST_CHECK(!try_extract_dib_format(NULL, file_list, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      try_extract_dib_format(NULL, file_list, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test with invalid data (too small)
   unsigned char invalid_dib[] = {0x01, 0x02, 0x03, 0x04};
   struct mock_data_object *mock_invalid = create_mock_dataobject(MOCK_FORMAT_DIB, invalid_dib, sizeof(invalid_dib));
   TEST_ASSERT(mock_invalid != NULL);
-  TEST_CHECK(!try_extract_dib_format(&mock_invalid->iface, file_list, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_dib_format(&mock_invalid->iface, file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
   IDataObject_Release(&mock_invalid->iface);
 
   // Test with invalid header size
@@ -826,9 +813,10 @@ static void test_try_extract_dib_format_error_handling(void) {
   invalid_bih.biBitCount = 24;
   struct mock_data_object *mock_header = create_mock_dataobject(MOCK_FORMAT_DIB, &invalid_bih, sizeof(invalid_bih));
   TEST_ASSERT(mock_header != NULL);
-  TEST_CHECK(!try_extract_dib_format(&mock_header->iface, file_list, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_dib_format(&mock_header->iface, file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
   IDataObject_Release(&mock_header->iface);
 
   // Test with unsupported bit depth
@@ -842,9 +830,10 @@ static void test_try_extract_dib_format_error_handling(void) {
   struct mock_data_object *mock_bit =
       create_mock_dataobject(MOCK_FORMAT_DIB, &unsupported_bih, sizeof(unsupported_bih));
   TEST_ASSERT(mock_bit != NULL);
-  TEST_CHECK(!try_extract_dib_format(&mock_bit->iface, file_list, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(try_extract_dib_format(&mock_bit->iface, file_list, &err),
+                   &err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument);
   IDataObject_Release(&mock_bit->iface);
 
   // Verify no files were created
@@ -863,14 +852,12 @@ static void test_try_extract_data_uri_only_success(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test text data URI extraction
-  if (!TEST_CHECK(try_extract_data_uri(&mock->iface, file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(try_extract_data_uri(&mock->iface, file_list, &err), &err)) {
     return;
   }
 
@@ -919,14 +906,12 @@ static void test_try_extract_data_uri_only_plain_text_fallback(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test plain text fallback processing
-  if (!TEST_CHECK(try_extract_plain_text(&mock->iface, file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(try_extract_plain_text(&mock->iface, file_list, &err), &err)) {
     return;
   }
 
@@ -982,20 +967,17 @@ static void test_try_extract_data_uri_only_error_handling(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test with NULL dataobj
-  TEST_CHECK(!try_extract_data_uri(NULL, file_list, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      try_extract_data_uri(NULL, file_list, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Test with NULL files
-  TEST_CHECK(!try_extract_data_uri(&mock->iface, NULL, &err));
-  TEST_CHECK(ov_error_is(&err, ov_error_type_generic, ov_error_generic_invalid_argument));
-  OV_ERROR_DESTROY(&err);
+  TEST_FAILED_WITH(
+      try_extract_data_uri(&mock->iface, NULL, &err), &err, ov_error_type_generic, ov_error_generic_invalid_argument);
 
   // Clean up
   gcmz_file_list_destroy(&file_list);
@@ -1013,14 +995,12 @@ static void test_extract_from_dataobj_with_data_uri(void) {
   struct gcmz_file_list *file_list = NULL;
   struct ov_error err = {0};
   file_list = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(file_list != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
     return;
   }
 
   // Test extraction through the main function
-  if (!TEST_CHECK(gcmz_dataobj_extract_from_dataobj(&mock->iface, file_list, &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_dataobj_extract_from_dataobj(&mock->iface, file_list, &err), &err)) {
     return;
   }
 

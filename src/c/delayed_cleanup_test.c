@@ -25,17 +25,14 @@ static bool file_exists(wchar_t const *const file_path) {
 
 static void test_delayed_cleanup_init_exit(void) {
   struct ov_error err = {0};
-  if (TEST_CHECK(gcmz_delayed_cleanup_init(&err))) {
+  if (TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
     gcmz_delayed_cleanup_exit();
   } else {
-    OV_ERROR_DESTROY(&err);
     return;
   }
 
-  if (TEST_CHECK(gcmz_delayed_cleanup_init(&err))) {
+  if (TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
     gcmz_delayed_cleanup_exit();
-  } else {
-    OV_ERROR_DESTROY(&err);
   }
 }
 
@@ -43,22 +40,21 @@ static void test_delayed_cleanup_schedule_file(void) {
   struct ov_error err = {0};
   wchar_t *test_file_path = NULL;
 
-  if (!TEST_CHECK(gcmz_delayed_cleanup_init(&err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
     return;
   }
-  if (!TEST_CHECK(gcmz_temp_create_directory(&err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_create_directory(&err), &err)) {
     return;
   }
-  if (!TEST_CHECK(gcmz_temp_build_path(&test_file_path, L"test_delayed_cleanup.tmp", &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_build_path(&test_file_path, L"test_delayed_cleanup.tmp", &err), &err)) {
     goto cleanup;
   }
 
   TEST_CHECK(create_test_file(test_file_path));
   TEST_CHECK(file_exists(test_file_path));
-  TEST_CHECK(gcmz_delayed_cleanup_schedule_file(test_file_path, &err));
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_schedule_file(test_file_path, &err), &err)) {
+    goto cleanup;
+  }
   TEST_CHECK(file_exists(test_file_path));
   gcmz_delayed_cleanup_exit();
   TEST_CHECK(!file_exists(test_file_path));
@@ -72,8 +68,13 @@ cleanup:
 
 static void test_delayed_cleanup_schedule_nonexistent_file(void) {
   struct ov_error err = {0};
-  TEST_CHECK(gcmz_delayed_cleanup_init(&err));
-  TEST_CHECK(gcmz_delayed_cleanup_schedule_file(L"C:\\nonexistent\\file.tmp", &err));
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_schedule_file(L"C:\\nonexistent\\file.tmp", &err), &err)) {
+    gcmz_delayed_cleanup_exit();
+    return;
+  }
   gcmz_delayed_cleanup_exit();
 }
 
@@ -90,40 +91,40 @@ static void test_delayed_cleanup_schedule_temporary_files(void) {
   struct gcmz_file *mutable_file2 = NULL;
   struct gcmz_file *mutable_file3 = NULL;
 
-  if (!TEST_CHECK(gcmz_delayed_cleanup_init(&err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
     return;
   }
-  if (!TEST_CHECK(gcmz_temp_create_directory(&err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_create_directory(&err), &err)) {
     return;
   }
 
   files = gcmz_file_list_create(&err);
-  if (!TEST_CHECK(files != NULL)) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(files != NULL, &err)) {
     return;
   }
 
-  if (!TEST_CHECK(gcmz_temp_build_path(&test_file1_path, L"test_temp1.tmp", &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_build_path(&test_file1_path, L"test_temp1.tmp", &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_temp_build_path(&test_file2_path, L"test_temp2.tmp", &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_build_path(&test_file2_path, L"test_temp2.tmp", &err), &err)) {
     goto cleanup;
   }
-  if (!TEST_CHECK(gcmz_temp_build_path(&test_file3_path, L"test_regular.tmp", &err))) {
-    OV_ERROR_DESTROY(&err);
+  if (!TEST_SUCCEEDED(gcmz_temp_build_path(&test_file3_path, L"test_regular.tmp", &err), &err)) {
     goto cleanup;
   }
 
   TEST_CHECK(create_test_file(test_file1_path));
   TEST_CHECK(create_test_file(test_file2_path));
   TEST_CHECK(create_test_file(test_file3_path));
-  TEST_CHECK(gcmz_file_list_add_temporary(files, test_file1_path, L"application/octet-stream", &err));
-  TEST_CHECK(gcmz_file_list_add_temporary(files, test_file2_path, L"application/octet-stream", &err));
-  TEST_CHECK(gcmz_file_list_add(files, test_file3_path, L"application/octet-stream", &err));
+  if (!TEST_SUCCEEDED(gcmz_file_list_add_temporary(files, test_file1_path, L"application/octet-stream", &err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(gcmz_file_list_add_temporary(files, test_file2_path, L"application/octet-stream", &err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(gcmz_file_list_add(files, test_file3_path, L"application/octet-stream", &err), &err)) {
+    goto cleanup;
+  }
   TEST_CHECK(gcmz_file_list_count(files) == 3);
   file1 = gcmz_file_list_get(files, 0);
   file2 = gcmz_file_list_get(files, 1);
@@ -131,7 +132,9 @@ static void test_delayed_cleanup_schedule_temporary_files(void) {
   TEST_CHECK(file1 && file1->temporary);
   TEST_CHECK(file2 && file2->temporary);
   TEST_CHECK(file3 && !file3->temporary);
-  TEST_CHECK(gcmz_delayed_cleanup_schedule_temporary_files(files, &err));
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_schedule_temporary_files(files, &err), &err)) {
+    goto cleanup;
+  }
   mutable_file1 = gcmz_file_list_get_mutable(files, 0);
   mutable_file2 = gcmz_file_list_get_mutable(files, 1);
   mutable_file3 = gcmz_file_list_get_mutable(files, 2);
@@ -165,15 +168,12 @@ cleanup:
 
 static void test_delayed_cleanup_invalid_arguments(void) {
   struct ov_error err = {0};
-  if (TEST_CHECK(!gcmz_delayed_cleanup_schedule_file(NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(!gcmz_delayed_cleanup_schedule_temporary_files(NULL, &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
-  if (TEST_CHECK(!gcmz_delayed_cleanup_schedule_file(L"some_file.tmp", &err))) {
-    OV_ERROR_DESTROY(&err);
-  }
+  // These tests call schedule functions without init, so they get ov_error_generic_fail (not initialized)
+  TEST_FAILED_WITH(gcmz_delayed_cleanup_schedule_file(NULL, &err), &err, ov_error_type_generic, ov_error_generic_fail);
+  TEST_FAILED_WITH(
+      gcmz_delayed_cleanup_schedule_temporary_files(NULL, &err), &err, ov_error_type_generic, ov_error_generic_fail);
+  TEST_FAILED_WITH(
+      gcmz_delayed_cleanup_schedule_file(L"some_file.tmp", &err), &err, ov_error_type_generic, ov_error_generic_fail);
 }
 
 TEST_LIST = {
