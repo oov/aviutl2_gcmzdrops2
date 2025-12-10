@@ -85,6 +85,53 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
   return lua_error(L);
 }
 
+int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char const *const funcname) {
+  if (!L || !funcname) {
+    if (e) {
+      OV_ERROR_DESTROY(e);
+    }
+    lua_pushnil(L);
+    lua_pushstring(L, "internal error");
+    return 2;
+  }
+
+  struct ov_error err = {0};
+  char *error_msg = NULL;
+
+  // Build function name part
+  static char const prefix[] = "gcmz_";
+  enum { prefix_len = sizeof(prefix) - 1 };
+  if (strncmp(funcname, prefix, prefix_len) == 0) {
+    lua_pushstring(L, "gcmz.");
+    lua_pushstring(L, funcname + prefix_len);
+  } else {
+    lua_pushstring(L, funcname);
+    lua_pushstring(L, "");
+  }
+  lua_pushstring(L, "(): ");
+
+  // Convert error to string
+  if (!error_to_string(e, &error_msg, &err)) {
+    OV_ERROR_DESTROY(&err);
+    lua_pushstring(L, "failed to build error message");
+  } else {
+    lua_pushstring(L, error_msg);
+  }
+
+  lua_concat(L, 4);
+
+  // Cleanup
+  if (error_msg) {
+    OV_ARRAY_DESTROY(&error_msg);
+  }
+  OV_ERROR_DESTROY(e);
+
+  // Return (nil, errmsg)
+  lua_pushnil(L);
+  lua_insert(L, -2); // Move nil before error message
+  return 2;
+}
+
 bool gcmz_lua_pcall(lua_State *const L, int nargs, int nresults, struct ov_error *const err) {
   if (!L) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);

@@ -216,6 +216,7 @@ set(LUA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lua")
 add_custom_command(TARGET gcmzdrops POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "${GCMZ_SCRIPT_DIR}"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/exo.lua" "${GCMZ_SCRIPT_DIR}/"
+  COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/entrypoint.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/ini.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/json.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/README.md" "${EXPORT_DIR}/GCMZDrops.txt"

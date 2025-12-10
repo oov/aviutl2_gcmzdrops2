@@ -74,7 +74,7 @@
 ```lua
 local M = {}
 
--- 優先度（省略可能、デフォルト: 1000）
+-- 優先度
 -- 数値が小さいほど先に実行されます
 M.priority = 1000
 
@@ -97,12 +97,12 @@ return M
 
 ### 優先度
 
-`priority` フィールドは、複数のハンドラースクリプトがある場合の実行順序を決定します。
+`priority` は、複数のハンドラースクリプトがある場合の実行順序を決定します。  
+この値を省略することはできません。
 
 | 値 | 説明 |
 |---|---|
 | 小さい値（例: 100） | 先に実行される（高優先度） |
-| 1000 | デフォルト値 |
 | 大きい値（例: 2000） | 後に実行される（低優先度） |
 
 ## フック関数
@@ -535,7 +535,7 @@ local info = gcmz.get_media_info(filepath)
 
 ### 戻り値
 
-以下のフィールドを含むテーブルを返します：
+成功時は以下のフィールドを含むテーブルを返します。失敗時は `nil, errmsg` を返します。
 
 | フィールド | 型 | 説明 |
 |-------|------|-------------|
@@ -548,13 +548,16 @@ local info = gcmz.get_media_info(filepath)
 ### エラー
 
 - `filepath` が指定されていない場合、エラーをスローします。
-- 動画、音声、画像ファイル以外のファイルの場合、エラーをスローします。
-- AviUtl2 がサポートしていないメディアファイルの場合、エラーをスローします。
+- ファイルが見つからない場合やメディア情報を取得できない場合は `nil, errmsg` を返します。
 
 ### 例
 
 ```lua
-local info = gcmz.get_media_info("C:/Videos/sample.mp4")
+local info, err = gcmz.get_media_info("C:/Videos/sample.mp4")
+if not info then
+    debug_print("メディア情報の取得に失敗: " .. err)
+    return
+end
 print("動画トラック数: " .. info.video_track_num)
 print("音声トラック数: " .. info.audio_track_num)
 
@@ -712,16 +715,21 @@ local temp_path = gcmz.create_temp_file(filename)
 
 ### 戻り値
 
-一時ファイルへのフルパスを返します。
+成功時は一時ファイルへのフルパスを返します。失敗時は `nil, errmsg` を返します。
 
 ### エラー
 
 - `filename` が指定されていない場合、エラーをスローします。
+- 一時ファイルの作成に失敗した場合は `nil, errmsg` を返します。
 
 ### 例
 
 ```lua
-local temp_path = gcmz.create_temp_file("output.txt")
+local temp_path, err = gcmz.create_temp_file("output.txt")
+if not temp_path then
+    debug_print("一時ファイルの作成に失敗: " .. err)
+    return
+end
 print("一時ファイルの保存先: " .. temp_path)
 ```
 
@@ -746,17 +754,21 @@ local dest_path = gcmz.save_file(src_path, dest_filename)
 
 ### 戻り値
 
-ファイルが保存された保存先のフルパスを返します。
+成功時はファイルが保存された保存先のフルパスを返します。失敗時は `nil, errmsg` を返します。
 
 ### エラー
 
 - `src_path` または `dest_filename` が指定されていない場合、エラーをスローします。
-- ソースファイルの読み取りまたは保存先への書き込みができない場合、エラーをスローします。
+- ソースファイルの読み取りまたは保存先への書き込みに失敗した場合は `nil, errmsg` を返します。
 
 ### 例
 
 ```lua
-local saved_path = gcmz.save_file("C:/temp/image.png", "saved_image.png")
+local saved_path, err = gcmz.save_file("C:/temp/image.png", "saved_image.png")
+if not saved_path then
+    debug_print("ファイルの保存に失敗: " .. err)
+    return
+end
 print("ファイルの保存先: " .. saved_path)
 ```
 
@@ -794,19 +806,23 @@ local converted = gcmz.convert_encoding(text, src_encoding, dest_encoding)
 
 ### 戻り値
 
-変換されたテキストを文字列として返します。
+成功時は変換されたテキストを文字列として返します。失敗時は `nil, errmsg` を返します。
 
 ### エラー
 
 - 必須パラメーターが指定されていない場合、エラーをスローします。
 - エンコーディング名がサポートされていない場合、エラーをスローします。
-- 変換に失敗した場合、エラーをスローします。
+- 変換に失敗した場合は `nil, errmsg` を返します。
 
 ### 例
 
 ```lua
 -- UTF-8 から Shift_JIS に変換
-local sjis_text = gcmz.convert_encoding("こんにちは", "utf8", "sjis")
+local sjis_text, err = gcmz.convert_encoding("こんにちは", "utf8", "sjis")
+if not sjis_text then
+    debug_print("変換に失敗: " .. err)
+    return
+end
 
 -- Shift_JIS から UTF-8 に変換
 local utf8_text = gcmz.convert_encoding(sjis_text, "sjis", "utf8")
@@ -840,13 +856,12 @@ EXO ファイルはテキストフィールドを16進数エンコードされ�
 
 ### 戻り値
 
-デコードされたテキストを文字列として返します。
+成功時はデコードされたテキストを文字列として返します。失敗時は `nil, errmsg` を返します。
 
 ### エラー
 
 - `hex_string` が指定されていない場合、エラーをスローします。
-- 16進数文字列の長さが4の倍数でない場合、エラーをスローします。
-- 文字列に無効な16進数文字が含まれている場合、エラーをスローします。
+- 16進数文字列の長さが4の倍数でない場合、または無効な16進数文字が含まれている場合は `nil, errmsg` を返します。
 
 ### 例
 
@@ -860,23 +875,6 @@ local empty = gcmz.decode_exo_text("")
 print(empty)  -- 出力: （空文字列）
 ```
 
----
-
-## エラーハンドリング
-
-すべての関数は失敗時に Lua エラーをスローする可能性があります。エラーハンドリングには `pcall` または `xpcall` を使用してください：
-
-```lua
-local ok, result = pcall(function()
-    return gcmz.convert_encoding("hello", "utf8", "invalid_encoding")
-end)
-
-if ok then
-    print("変換結果: " .. result)
-else
-    print("エラー: " .. result)
-end
-```
 
 ---
 

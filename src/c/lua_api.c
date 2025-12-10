@@ -91,7 +91,7 @@ cleanup:
   if (project_path) {
     OV_ARRAY_DESTROY(&project_path);
   }
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 enum encoding_type {
@@ -283,7 +283,7 @@ static int gcmz_lua_convert_encoding(lua_State *L) {
     if (result) {
       OV_ARRAY_DESTROY(&result);
     }
-    return gcmz_luafn_err(L, &err);
+    return gcmz_luafn_result_err(L, &err);
   }
 
   lua_pushlstring(L, result, result_len);
@@ -308,7 +308,7 @@ static int gcmz_lua_create_temp_file(lua_State *L) {
   struct ov_error err = {0};
   char *dest_path = g_lua_api_options.temp_file_provider(g_lua_api_options.userdata, filename, &err);
   if (!dest_path) {
-    return gcmz_luafn_err(L, &err);
+    return gcmz_luafn_result_err(L, &err);
   }
 
   lua_pushstring(L, dest_path);
@@ -434,7 +434,7 @@ cleanup:
   if (dest_path) {
     OV_ARRAY_DESTROY(&dest_path);
   }
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 static int parse_hex_digit(char c) {
@@ -489,7 +489,7 @@ cleanup:
   if (script_dir) {
     OV_ARRAY_DESTROY(&script_dir);
   }
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 static int gcmz_lua_get_media_info(lua_State *L) {
@@ -547,7 +547,7 @@ static int gcmz_lua_get_media_info(lua_State *L) {
   result = 1;
 
 cleanup:
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 // Decode EXO text field (hex-encoded UTF-16LE) to UTF-8
@@ -563,9 +563,6 @@ static int gcmz_lua_decode_exo_text(lua_State *L) {
     lua_pushliteral(L, "");
     return 1;
   }
-  if (hex_len % 4 != 0) {
-    return luaL_error(L, "invalid hex string length (must be multiple of 4)");
-  }
 
   struct ov_error err = {0};
   wchar_t *wide_chars = NULL;
@@ -573,6 +570,14 @@ static int gcmz_lua_decode_exo_text(lua_State *L) {
   int result = -1;
 
   {
+    if (hex_len % 4 != 0) {
+      OV_ERROR_SET(&err,
+                   ov_error_type_generic,
+                   ov_error_generic_invalid_argument,
+                   "invalid hex string length (must be multiple of 4)");
+      goto cleanup;
+    }
+
     size_t const wide_count = hex_len / 4;
     if (!OV_ARRAY_GROW(&wide_chars, wide_count + 1)) {
       OV_ERROR_SET_GENERIC(&err, ov_error_generic_out_of_memory);
@@ -589,7 +594,7 @@ static int gcmz_lua_decode_exo_text(lua_State *L) {
       int d3 = parse_hex_digit(hex_str[i * 4 + 3]);
 
       if (d0 < 0 || d1 < 0 || d2 < 0 || d3 < 0) {
-        OV_ERROR_SET_GENERIC(&err, ov_error_generic_invalid_argument);
+        OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_invalid_argument, "invalid hex character in string");
         goto cleanup;
       }
 
@@ -633,7 +638,7 @@ cleanup:
   if (wide_chars) {
     OV_ARRAY_DESTROY(&wide_chars);
   }
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 /**
@@ -946,7 +951,7 @@ cleanup:
   if (key_w) {
     OV_ARRAY_DESTROY(&key_w);
   }
-  return result < 0 ? gcmz_luafn_err(L, &err) : result;
+  return result < 0 ? gcmz_luafn_result_err(L, &err) : result;
 }
 
 /**

@@ -20,17 +20,38 @@
 int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *const funcname);
 
 /**
- * @brief Report error to Lua and clean up
+ * @brief Report error to Lua and clean up (raises error - does not return)
  *
  * Converts and reports an ov_error to Lua's error system,
  * then cleans up the error structure. Automatically captures
  * the function name for error context.
+ *
+ * Use this for programming errors (invalid arguments, API not configured, etc.)
+ * where the script should not continue execution.
  *
  * @param L Lua state
  * @param err Error to report
  * @return Result of lua_error (does not return)
  */
 #define gcmz_luafn_err(L, err) gcmz_luafn_err_((L), (err), (__func__))
+
+// Implementation function, use gcmz_luafn_result_err macro instead
+int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char const *const funcname);
+
+/**
+ * @brief Return error as (nil, errmsg) to Lua and clean up
+ *
+ * Converts an ov_error to an error message and returns (nil, errmsg) to Lua.
+ * Cleans up the error structure after use.
+ *
+ * Use this for operational errors (file not found, conversion failed, etc.)
+ * where the script can reasonably handle the error with pcall or checking nil.
+ *
+ * @param L Lua state
+ * @param err Error to convert and clean up
+ * @return 2 (number of return values: nil and error message)
+ */
+#define gcmz_luafn_result_err(L, err) gcmz_luafn_result_err_((L), (err), (__func__))
 
 /**
  * @brief Call Lua function with error handling
