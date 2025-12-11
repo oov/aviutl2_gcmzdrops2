@@ -90,7 +90,7 @@ msgid "Disabled"
 msgstr "停止中"
 
 msgid "DragEnter hook processing failed"
-msgstr "DragEnter フック処理に失敗しました。"
+msgstr "DragEnter フック処理に失敗しました"
 
 msgid "EXO file conversion failed, proceeding with original files"
 msgstr "EXOファイルの変換に失敗しました。元のファイルで処理を続行します"
@@ -144,6 +144,10 @@ msgstr "GCMZDrops 設定"
 
 msgid "GCMZDrops Settings..."
 msgstr "GCMZDrops の設定..."
+
+#, c-format
+msgid "GCMZDrops requires AviUtl ExEdit2 %1$s or later."
+msgstr "GCMZDrops を使用するには AviUtl ExEdit2 %1$s 以降が必要です。"
 
 msgid "M&inute"
 msgstr "分(&I)"
@@ -245,17 +249,31 @@ msgstr ""
 "Meiryo UI\n"
 "MS UI Gothic"
 
+msgid "drop via official API failed, falling back to traditional method"
+msgstr "公式APIでのドロップに失敗しました。従来の方法にフォールバックします"
+
+#, c-format
+msgid "error occurred while executing %1$s script handler"
+msgstr "%1$s スクリプトハンドラーの実行中にエラーが発生しました"
+
 msgctxt "external_api"
 msgid "external API already exists"
 msgstr "外部連携APIは既に存在しています"
 
 msgctxt "external_api"
 msgid "external API initialized successfully"
-msgstr "外部連携APIが正常に初期化されました。"
+msgstr "外部連携APIが正常に初期化されました"
 
 msgctxt "external_api"
 msgid "external API is disabled because the AviUtl ExEdit2 version is unknown"
-msgstr "AviUtl ExEdit2 のバージョンが不明なため、外部連携APIは無効化されています。"
+msgstr "AviUtl ExEdit2 のバージョンが不明なため、外部連携APIは無効化されています"
+
+msgid "failed to add handler script %1$hs"
+msgstr "ハンドラースクリプト %1$hs の追加に失敗しました"
+
+#, c-format
+msgid "failed to add handler script file %1$ls"
+msgstr "ハンドラースクリプトファイル %1$ls の追加に失敗しました"
 
 msgid "failed to clean up temporary file"
 msgstr "一時ファイルのクリーンアップに失敗しました"
@@ -267,17 +285,23 @@ msgstr "古い一時ディレクトリのクリーンアップに失敗しまし
 msgid "failed to create thread"
 msgstr "スレッドの作成に失敗しました"
 
-msgid "failed to create thread for delayed initialization"
-msgstr "遅延初期化用のスレッドの作成に失敗しました"
-
 msgid "failed to create unique temporary file"
 msgstr "一意な一時ファイルの作成に失敗しました"
+
+msgid "failed to determine cursor position, using default drop coordinates"
+msgstr "カーソル位置を特定できませんでした。デフォルトのドロップ座標を使用します"
 
 msgid "failed to drop from external API request"
 msgstr "外部連携APIリクエストからのドロップに失敗しました"
 
+msgid "failed to get debug menu visibility setting"
+msgstr "デバッグメニューの表示設定を取得できませんでした"
+
 msgid "failed to get external API setting"
 msgstr "外部連携APIの設定を取得できませんでした"
+
+msgid "failed to handle project load"
+msgstr "プロジェクトの読み込み処理に失敗しました"
 
 msgid "failed to initialize condition variable"
 msgstr "条件変数の初期化に失敗しました"
@@ -294,7 +318,7 @@ msgstr "ミューテックスの初期化に失敗しました"
 msgid "failed to load language resources, continuing without them."
 msgstr "言語リソースの読み込みに失敗しました。言語リソースなしで継続します。"
 
-msgid "failed to move cursor to target position"
+msgid "failed to move cursor after drop"
 msgstr "カーソルを目標位置に移動できませんでした"
 
 msgid "failed to paste from clipboard"
@@ -306,14 +330,14 @@ msgstr "デバッグキャプチャの実行に失敗しました"
 msgid "failed to remove temporary directory"
 msgstr "一時ディレクトリの削除に失敗しました"
 
-msgid "failed to set display zoom"
-msgstr "表示倍率の設定に失敗しました"
-
-msgid "failed to update external API project data"
+msgid "failed to update external api project information"
 msgstr "外部連携APIのプロジェクトデータの更新に失敗しました"
 
-msgid "failed to update external API state"
-msgstr "外部連携APIの状態の更新に失敗しました"
+msgid "failed to update settings"
+msgstr "設定の更新に失敗しました"
+
+msgid "failed to update tray icon visibility"
+msgstr "トレイアイコンの表示状態の更新に失敗しました"
 
 #, c-format
 msgid "invalid hex character at position %1$zu"
@@ -350,10 +374,10 @@ msgstr "タイムラインのスクリーンショットを \"%1$ls\" に保存�
 
 msgctxt "cleanup_stale_temporary_directories"
 msgid "stale temporary directory cleanup complete"
-msgstr "古い一時ディレクトリのクリーンアップが完了しました。"
+msgstr "古い一時ディレクトリのクリーンアップが完了しました"
 
 msgid "too many AviUtl2 manager windows found"
-msgstr "AviUtl2 マネージャーウィンドウが多すぎます。"
+msgstr "AviUtl2 マネージャーウィンドウが多すぎます"
 
 msgid "unknown AviUtl ExEdit2 version detected. some features will be disabled."
 msgstr "不明な AviUtl ExEdit2 のバージョンが検出されました。一部の機能は無効化されます。"
@@ -364,4 +388,4 @@ msgstr "未知の処理モード: %1$d"
 
 #. trans: This dagger helps UTF-8 detection. You don't need to translate this.
 msgid "†"
-msgstr ""
+msgstr "†"

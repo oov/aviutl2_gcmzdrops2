@@ -1,8 +1,4 @@
 
-// Core implementation for GCMZDrops plugin
-// This file contains the main plugin logic, moved from dllmain.c
-// The exported functions remain in dllmain.c
-
 #include "gcmzdrops.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -448,7 +444,7 @@ static bool create_object_via_official_api(struct gcmzdrops *const ctx,
     };
 
     if (!ctx->edit->call_edit_section_param) {
-      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "call_edit_section_param not available");
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_unexpected);
       goto cleanup;
     }
 
@@ -528,7 +524,8 @@ static void on_drop_completion(struct gcmz_drop_complete_context *const dcc,
         goto cleanup;
       }
       // On failure, fall back to traditional drop with proper coordinates
-      gcmz_logf_warn(&err, "%1$hs", "%1$hs", gettext("official API failed, falling back to traditional drop"));
+      gcmz_logf_warn(
+          &err, "%1$hs", "%1$hs", gettext("drop via official API failed, falling back to traditional method"));
       OV_ERROR_DESTROY(&err);
     }
 
@@ -1003,7 +1000,7 @@ static void update_tray_visibility(struct gcmzdrops *const ctx) {
   struct ov_error err = {0};
   bool show_debug_menu = false;
   if (!gcmz_config_get_show_debug_menu(ctx->config, &show_debug_menu, &err)) {
-    gcmz_logf_warn(&err, "%1$hs", "%1$hs", gettext("failed to get show debug menu setting"));
+    gcmz_logf_warn(&err, "%1$hs", "%1$hs", gettext("failed to get debug menu visibility setting"));
     OV_ERROR_DESTROY(&err);
     return;
   }
