@@ -51,6 +51,7 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
 
   struct ov_error err = {0};
   char *error_msg = NULL;
+  bool failed = false;
 
   luaL_where(L, 1);
 
@@ -68,7 +69,7 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
 
   // Convert error to string
   if (!error_to_string(e, &error_msg, &err)) {
-    OV_ERROR_DESTROY(&err);
+    failed = true;
     lua_pushstring(L, "failed to build error message");
   } else {
     lua_pushstring(L, error_msg);
@@ -76,12 +77,13 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
 
   lua_concat(L, 5);
 
-  // Cleanup
   if (error_msg) {
     OV_ARRAY_DESTROY(&error_msg);
   }
+  if (failed) {
+    OV_ERROR_DESTROY(&err);
+  }
   OV_ERROR_DESTROY(e);
-
   return lua_error(L);
 }
 
@@ -97,6 +99,7 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
 
   struct ov_error err = {0};
   char *error_msg = NULL;
+  bool failed = false;
 
   // Build function name part
   static char const prefix[] = "gcmz_";
@@ -112,7 +115,7 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
 
   // Convert error to string
   if (!error_to_string(e, &error_msg, &err)) {
-    OV_ERROR_DESTROY(&err);
+    failed = true;
     lua_pushstring(L, "failed to build error message");
   } else {
     lua_pushstring(L, error_msg);
@@ -120,9 +123,11 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
 
   lua_concat(L, 4);
 
-  // Cleanup
   if (error_msg) {
     OV_ARRAY_DESTROY(&error_msg);
+  }
+  if (failed) {
+    OV_ERROR_DESTROY(&err);
   }
   OV_ERROR_DESTROY(e);
 
