@@ -3,11 +3,58 @@ option(USE_ADDRESS_SANITIZER "use address sanitizer" OFF)
 cmake_minimum_required(VERSION 3.10)
 
 find_program(CLANG_FORMAT_EXE clang-format)
-file(GLOB_RECURSE sources LIST_DIRECTORIES false CONFIGURE_DEPENDS "*.c" "*.h")
-list(FILTER sources EXCLUDE REGEX "${CMAKE_CURRENT_SOURCE_DIR}/3rd")
-list(FILTER sources EXCLUDE REGEX "test_🌙_module\\.(c|h)")
+file(GLOB_RECURSE C_SOURCES LIST_DIRECTORIES false CONFIGURE_DEPENDS "*.c" "*.h")
+list(FILTER C_SOURCES EXCLUDE REGEX "${CMAKE_CURRENT_SOURCE_DIR}/3rd")
+list(FILTER C_SOURCES EXCLUDE REGEX "test_🌙_module\\.(c|h)")
+
+add_custom_target(${PROJECT_NAME}-format-c
+  COMMAND ${CLANG_FORMAT_EXE} -style=file -i ${C_SOURCES}
+)
+
+set(STYLUA_VERSION "v2.3.1")
+if(CMAKE_HOST_WIN32)
+  set(STYLUA_ARCHIVE "stylua-windows-x86_64.zip")
+  set(STYLUA_EXE_NAME "stylua.exe")
+else()
+  set(STYLUA_ARCHIVE "stylua-linux-x86_64-musl.zip")
+  set(STYLUA_EXE_NAME "stylua")
+endif()
+set(STYLUA_URL "https://github.com/JohnnyMorganz/StyLua/releases/download/${STYLUA_VERSION}/${STYLUA_ARCHIVE}")
+set(STYLUA_ARCHIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/${STYLUA_ARCHIVE}")
+set(STYLUA_DIR "${CMAKE_CURRENT_BINARY_DIR}/stylua")
+set(STYLUA_EXE "${STYLUA_DIR}/${STYLUA_EXE_NAME}")
+if(NOT EXISTS "${STYLUA_EXE}")
+  if(NOT EXISTS "${STYLUA_ARCHIVE_PATH}")
+    file(DOWNLOAD "${STYLUA_URL}" "${STYLUA_ARCHIVE_PATH}")
+  endif()
+  file(MAKE_DIRECTORY "${STYLUA_DIR}")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E tar xf "${STYLUA_ARCHIVE_PATH}"
+    WORKING_DIRECTORY "${STYLUA_DIR}"
+  )
+  if(NOT CMAKE_HOST_WIN32)
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E chmod +x "${STYLUA_EXE}"
+    )
+  endif()
+endif()
+
+set(STYLUA_CONFIG_PATH "${CMAKE_SOURCE_DIR}/.stylua.toml")
+set(STYLUA_CONFIG_ARGS)
+if(EXISTS "${STYLUA_CONFIG_PATH}")
+  set(STYLUA_CONFIG_ARGS "--config-path" "${STYLUA_CONFIG_PATH}")
+endif()
+
+set(LUA_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lua")
+file(GLOB_RECURSE lua_sources LIST_DIRECTORIES false CONFIGURE_DEPENDS "${LUA_SOURCE_DIR}/*.lua")
+list(FILTER lua_sources EXCLUDE REGEX "json\\.lua$")
+
+add_custom_target(${PROJECT_NAME}-format-lua
+  COMMAND "${STYLUA_EXE}" ${STYLUA_CONFIG_ARGS} ${lua_sources}
+)
+
 add_custom_target(${PROJECT_NAME}-format ALL
-  COMMAND ${CLANG_FORMAT_EXE} -style=file -i ${sources}
+  DEPENDS ${PROJECT_NAME}-format-c ${PROJECT_NAME}-format-lua
 )
 
 add_subdirectory(3rd/ovbase)
@@ -147,7 +194,7 @@ target_link_options(gcmzdrops_intf INTERFACE
   $<$<BOOL:${USE_ADDRESS_SANITIZER}>:-fsanitize=address>
   $<$<CONFIG:Release>:-s>
 )
-add_dependencies(gcmzdrops_intf ${PROJECT_NAME}_format)
+add_dependencies(gcmzdrops_intf ${PROJECT_NAME}-format)
 
 add_library(gcmzdrops SHARED
   api.c

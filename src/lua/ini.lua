@@ -23,7 +23,9 @@ local P = {}
 -- local config = ini.new(io.lines("config.ini"))
 function P.new(source)
   if source == nil then
-    return P.new_core(function() return nil end)
+    return P.new_core(function()
+      return nil
+    end)
   end
   local t = type(source)
   if t == "function" then

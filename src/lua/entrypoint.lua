@@ -34,7 +34,7 @@ local function load_handler(filepath)
     name = "@" .. filepath,
     priority = priority,
     module = module_table,
-    active = true
+    active = true,
   })
   return true
 end
@@ -74,7 +74,7 @@ local function add_module(name, module_table)
     name = name,
     priority = priority,
     module = module_table,
-    active = true
+    active = true,
   })
   table.sort(modules, function(a, b)
     return a.priority < b.priority
