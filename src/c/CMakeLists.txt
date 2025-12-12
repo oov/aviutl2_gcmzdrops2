@@ -46,11 +46,11 @@ if(EXISTS "${STYLUA_CONFIG_PATH}")
 endif()
 
 set(LUA_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lua")
-file(GLOB_RECURSE lua_sources LIST_DIRECTORIES false CONFIGURE_DEPENDS "${LUA_SOURCE_DIR}/*.lua")
-list(FILTER lua_sources EXCLUDE REGEX "json\\.lua$")
+file(GLOB_RECURSE LUA_SOURCES LIST_DIRECTORIES false CONFIGURE_DEPENDS "${LUA_SOURCE_DIR}/*.lua")
+list(FILTER LUA_SOURCES EXCLUDE REGEX "json\\.lua$")
 
 add_custom_target(${PROJECT_NAME}-format-lua
-  COMMAND "${STYLUA_EXE}" ${STYLUA_CONFIG_ARGS} ${lua_sources}
+  COMMAND "${STYLUA_EXE}" ${STYLUA_CONFIG_ARGS} ${LUA_SOURCES}
 )
 
 add_custom_target(${PROJECT_NAME}-format ALL
