@@ -250,11 +250,11 @@ msgstr ""
 
 #, fuzzy
 msgid "drop via official API failed, falling back to traditional method"
-msgstr "通过官方API拖放失败，回退到传统方法"
+msgstr "通过官方API拖放失败，将回退为传统方法"
 
 #, fuzzy, c-format
 msgid "error occurred while executing %1$s script handler"
-msgstr "执行 %1$s 脚本处理程序时发生错误"
+msgstr "执行 %1$s 脚本处理器时发生错误"
 
 msgctxt "external_api"
 msgid "external API already exists"
@@ -270,11 +270,11 @@ msgstr "由于AviUtl ExEdit2版本未知，外部API已被禁用"
 
 #, fuzzy
 msgid "failed to add handler script %1$hs"
-msgstr "添加处理脚本 %1$hs 失败"
+msgstr "处理器脚本 %1$hs 添加失败"
 
 #, fuzzy, c-format
 msgid "failed to add handler script file %1$ls"
-msgstr "添加处理脚本文件 %1$ls 失败"
+msgstr "处理器脚本文件 %1$ls 添加失败"
 
 msgid "failed to clean up temporary file"
 msgstr "临时文件清理失败"
@@ -282,6 +282,10 @@ msgstr "临时文件清理失败"
 msgctxt "cleanup_stale_temporary_directories"
 msgid "failed to cleanup stale temporary directories"
 msgstr "过时的临时目录清理失败"
+
+#, fuzzy
+msgid "failed to complete delayed initialization"
+msgstr "托盘图标可见性更新失败"
 
 msgid "failed to create thread"
 msgstr "线程创建失败"
@@ -291,21 +295,21 @@ msgstr "唯一临时文件创建失败"
 
 #, fuzzy
 msgid "failed to determine cursor position, using default drop coordinates"
-msgstr "无法确定光标位置，使用默认拖放坐标"
+msgstr "无法确定光标位置，将使用默认拖放坐标"
 
 msgid "failed to drop from external API request"
 msgstr "来自外部API请求的拖放失败"
 
 #, fuzzy
 msgid "failed to get debug menu visibility setting"
-msgstr "获取调试菜单显示设置失败"
+msgstr "调试菜单可见性设置获取失败"
 
 msgid "failed to get external API setting"
 msgstr "外部API设置获取失败"
 
 #, fuzzy
 msgid "failed to handle project load"
-msgstr "项目加载处理失败"
+msgstr "工程加载处理失败"
 
 msgid "failed to initialize condition variable"
 msgstr "条件变量初始化失败"
@@ -346,6 +350,9 @@ msgstr "设置更新失败"
 #, fuzzy
 msgid "failed to update tray icon visibility"
 msgstr "托盘图标可见性更新失败"
+
+msgid "insertion position collision detected, cannot insert with specified margin"
+msgstr ""
 
 #, c-format
 msgid "invalid hex character at position %1$zu"
