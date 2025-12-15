@@ -379,13 +379,70 @@ cleanup:
 }
 
 /**
- * @brief Result of insert_files_to_timeline operation
+ * @brief Create an object from .object file
+ *
+ * Reads an .object file and creates an AviUtl2 object using its content.
+ *
+ * @param file_path Path to the .object file
+ * @param edit Edit section interface
+ * @param layer Layer number (0-based)
+ * @param frame Frame position
+ * @param err Error output
+ * @return Object handle on success, NULL on failure
  */
-struct insert_files_result {
-  int inserted_count;              ///< Number of files successfully inserted
-  int final_layer;                 ///< Layer number after all insertions (for next insertion)
-  aviutl2_object_handle first_obj; ///< Handle to the first inserted object (for focus)
-};
+static aviutl2_object_handle create_object_from_file(wchar_t const *const file_path,
+                                                     struct aviutl2_edit_section *const edit,
+                                                     int const layer,
+                                                     int const frame,
+                                                     struct ov_error *const err) {
+  if (!file_path || !edit || !edit->create_object_from_alias) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return NULL;
+  }
+
+  struct ovl_source *source = NULL;
+  char *content = NULL;
+  aviutl2_object_handle obj = NULL;
+
+  {
+    if (!ovl_source_file_create(file_path, &source, err)) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+
+    uint64_t const file_size = ovl_source_size(source);
+    if (file_size == UINT64_MAX || file_size > SIZE_MAX - 1) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "file size too large or invalid");
+      goto cleanup;
+    }
+
+    size_t const size = (size_t)file_size;
+    if (!OV_ARRAY_GROW(&content, size + 1)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+
+    if (ovl_source_read(source, content, 0, size) != size) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "failed to read file");
+      goto cleanup;
+    }
+    content[size] = '\0';
+
+    obj = edit->create_object_from_alias(content, layer, frame, 1);
+    if (!obj) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "create_object_from_alias failed");
+    }
+  }
+
+cleanup:
+  if (content) {
+    OV_ARRAY_DESTROY(&content);
+  }
+  if (source) {
+    ovl_source_destroy(&source);
+  }
+  return obj;
+}
 
 /**
  * @brief Insert files from file list into timeline
@@ -400,117 +457,81 @@ struct insert_files_result {
  * @param edit Edit section
  * @param start_layer Starting layer (0-based)
  * @param frame Frame position
- * @return Result containing inserted count, final layer, and first object handle
+ * @return Result first object handle on success, NULL on failure
  */
-static struct insert_files_result insert_files_to_timeline(struct gcmz_file_list const *const file_list,
-                                                           struct aviutl2_edit_section *const edit,
-                                                           int const start_layer,
-                                                           int const frame) {
-  struct insert_files_result result = {
-      .inserted_count = 0,
-      .final_layer = start_layer,
-      .first_obj = NULL,
-  };
-
+static aviutl2_object_handle insert_files_to_timeline(struct gcmz_file_list const *const file_list,
+                                                      struct aviutl2_edit_section *const edit,
+                                                      int const start_layer,
+                                                      int const frame,
+                                                      struct ov_error *const err) {
   if (!file_list || !edit) {
-    return result;
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return NULL;
   }
 
   size_t const count = gcmz_file_list_count(file_list);
+  aviutl2_object_handle first_obj = NULL;
   int current_layer = start_layer;
 
   for (size_t i = 0; i < count; ++i) {
     struct gcmz_file const *const file = gcmz_file_list_get(file_list, i);
     if (!file || !file->path) {
+      gcmz_logf_warn(NULL, "%1$ls", gettext("skipping invalid file in list"));
       continue;
     }
-
     wchar_t const *const ext = wcsrchr(file->path, L'.');
-
-    // Check if it's an .object file
-    if (ext && gcmz_extension_equals(ext, L".object")) {
-      struct ovl_source *source = NULL;
-      char *content = NULL;
-      struct ov_error local_err = {0};
-
-      if (!ovl_source_file_create(file->path, &source, &local_err)) {
-        gcmz_logf_warn(&local_err, "%1$ls", gettext("failed to read object file: %1$ls"), file->path);
-        OV_ERROR_DESTROY(&local_err);
+    if (!ext) {
+      gcmz_logf_warn(NULL, "%1$ls", gettext("skipping file with no extension: %1$ls"), file->path);
+      continue;
+    }
+    if (gcmz_extension_equals(ext, L".object")) {
+      aviutl2_object_handle obj = create_object_from_file(file->path, edit, current_layer, frame, err);
+      if (!obj) {
+        gcmz_logf_warn(err, "%1$ls", gettext("failed to insert file: %1$ls"), file->path);
+        OV_ERROR_DESTROY(err);
         continue;
       }
-
-      uint64_t const file_size = ovl_source_size(source);
-      if (file_size != UINT64_MAX && file_size <= SIZE_MAX - 1) {
-        size_t const size = (size_t)file_size;
-        if (OV_ARRAY_GROW(&content, size + 1)) {
-          size_t const bytes_read = ovl_source_read(source, content, 0, size);
-          if (bytes_read == size) {
-            content[size] = '\0';
-
-            if (edit->create_object_from_alias) {
-              aviutl2_object_handle obj = edit->create_object_from_alias(content, current_layer, frame, 1);
-              if (obj) {
-                if (!result.first_obj) {
-                  result.first_obj = obj;
-                }
-                ++result.inserted_count;
-                int layer_count = 1;
-                if (get_object_layer_count(file->path, &layer_count, NULL)) {
-                  current_layer += layer_count;
-                } else {
-                  ++current_layer;
-                }
-              } else {
-                gcmz_logf_warn(NULL, "%1$ls", gettext("failed to insert object file: %1$ls"), file->path);
-              }
-            }
-          }
-          OV_ARRAY_DESTROY(&content);
-        }
+      if (!first_obj) {
+        first_obj = obj;
       }
-      ovl_source_destroy(&source);
-      continue;
-    }
-
-    // For .txt files, create text object alias and insert
-    if (ext && gcmz_extension_equals(ext, L".txt")) {
-      struct ov_error local_err = {0};
-      aviutl2_object_handle obj = create_text_object(file->path, edit, current_layer, frame, &local_err);
-      if (obj) {
-        if (!result.first_obj) {
-          result.first_obj = obj;
-        }
-        ++result.inserted_count;
-        ++current_layer;
+      int layer_count = 1;
+      if (get_object_layer_count(file->path, &layer_count, NULL)) {
+        current_layer += layer_count;
       } else {
-        gcmz_logf_warn(&local_err, "%1$ls", gettext("failed to insert text file: %1$ls"), file->path);
-        OV_ERROR_DESTROY(&local_err);
+        ++current_layer;
       }
       continue;
     }
-
-    if (edit->is_support_media_file && edit->is_support_media_file(file->path, false)) {
-      if (edit->create_object_from_media_file) {
-        aviutl2_object_handle obj = edit->create_object_from_media_file(file->path, current_layer, frame, 0);
-        if (obj) {
-          if (!result.first_obj) {
-            result.first_obj = obj;
-          }
-          ++result.inserted_count;
-          ++current_layer;
-        } else {
-          gcmz_logf_warn(NULL, "%1$ls", gettext("failed to insert media file: %1$ls"), file->path);
-        }
+    if (gcmz_extension_equals(ext, L".txt")) {
+      aviutl2_object_handle obj = create_text_object(file->path, edit, current_layer, frame, err);
+      if (!obj) {
+        gcmz_logf_warn(err, "%1$ls", gettext("failed to insert file: %1$ls"), file->path);
+        OV_ERROR_DESTROY(err);
+        continue;
       }
+      if (!first_obj) {
+        first_obj = obj;
+      }
+      ++current_layer;
       continue;
     }
-
-    // Unknown file type - skip with warning
+    if (edit->is_support_media_file(file->path, false)) {
+      aviutl2_object_handle obj = edit->create_object_from_media_file(file->path, current_layer, frame, 0);
+      if (!obj) {
+        gcmz_logf_warn(err, "%1$ls", gettext("failed to insert file: %1$ls"), file->path);
+        OV_ERROR_DESTROY(err);
+        continue;
+      }
+      if (!first_obj) {
+        first_obj = obj;
+      }
+      ++current_layer;
+      continue;
+    }
     gcmz_logf_warn(NULL, "%1$ls", gettext("skipping unsupported file: %1$ls"), file->path);
   }
 
-  result.final_layer = current_layer;
-  return result;
+  return first_obj;
 }
 
 /**
@@ -527,17 +548,15 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
   if (!paste_ctx || !paste_ctx->ctx || !paste_ctx->edit) {
     return;
   }
-  struct aviutl2_edit_section *const edit = paste_ctx->edit;
-  int const layer = paste_ctx->layer;
-  int const frame = paste_ctx->frame;
-  size_t const count = gcmz_file_list_count(file_list);
-  struct insert_files_result const result = insert_files_to_timeline(file_list, edit, layer, frame);
-
-  if (result.inserted_count == 0 && count > 0) {
-    gcmz_logf_error(NULL, "%1$hs", "%1$hs", gettext("clipboard paste via official API failed"));
-  } else if (result.first_obj && edit->set_focus_object) {
-    edit->set_focus_object(result.first_obj);
+  struct ov_error err = {0};
+  aviutl2_object_handle obj =
+      insert_files_to_timeline(file_list, paste_ctx->edit, paste_ctx->layer, paste_ctx->frame, &err);
+  if (!obj) {
+    gcmz_logf_error(NULL, "%1$ls", "%1$ls", gettext("failed to insert files into timeline"));
+    OV_ERROR_DESTROY(&err);
+    return;
   }
+  paste_ctx->edit->set_focus_object(obj);
 }
 
 /**
@@ -595,17 +614,15 @@ static void on_drop_completion(struct gcmz_file_list const *const file_list, voi
     }
   }
 
-  size_t const count = gcmz_file_list_count(file_list);
-  struct insert_files_result const result = insert_files_to_timeline(file_list, edit, layer, frame);
-
-  if (result.inserted_count == 0 && count > 0) {
-    gcmz_logf_error(NULL, "%1$hs", "%1$hs", gettext("drop via official API failed"));
-  } else if (result.first_obj && edit->set_focus_object) {
-    edit->set_focus_object(result.first_obj);
+  struct ov_error err = {0};
+  aviutl2_object_handle const obj = insert_files_to_timeline(file_list, edit, layer, frame, &err);
+  if (!obj) {
+    gcmz_logf_error(NULL, "%1$ls", "%1$ls", gettext("failed to insert files into timeline"));
+    OV_ERROR_DESTROY(&err);
+    return;
   }
-
-  // Handle frame advance after drop completes
-  if (api_ctx->frame_advance != 0 && edit->set_cursor_layer_frame) {
+  edit->set_focus_object(obj);
+  if (api_ctx->frame_advance != 0) {
     int const move_to = frame + api_ctx->frame_advance;
     edit->set_cursor_layer_frame(layer - 1, move_to);
   }
