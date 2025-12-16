@@ -91,16 +91,16 @@ cleanup:
     wchar_t title[128];
     wchar_t main_instruction[128];
     wchar_t content[512];
-    ov_snprintf_wchar(title, sizeof(title) / sizeof(title[0]), L"%s", L"%s", gettext("GCMZDrops"));
+    ov_snprintf_wchar(title, sizeof(title) / sizeof(title[0]), L"%1$hs", L"%1$hs", gettext("GCMZDrops"));
     ov_snprintf_wchar(main_instruction,
                       sizeof(main_instruction) / sizeof(main_instruction[0]),
-                      L"%s",
-                      L"%s",
+                      L"%1$hs",
+                      L"%1$hs",
                       gettext("Failed to initialize GCMZDrops."));
     ov_snprintf_wchar(content,
                       sizeof(content) / sizeof(content[0]),
-                      L"%s",
-                      L"%s",
+                      L"%1$hs",
+                      L"%1$hs",
                       gettext("The plugin could not start correctly.\nGCMZDrops is unavailable at the moment."));
     gcmz_error_dialog(NULL, &err, title, main_instruction, content, TD_ERROR_ICON, TDCBF_OK_BUTTON);
     OV_ERROR_DESTROY(&err);
@@ -137,22 +137,22 @@ void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host);
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
   static wchar_t information[64];
   ov_snprintf_wchar(
-      information, sizeof(information) / sizeof(information[0]), L"%1$hs", L"GCMZDrops %1$s by oov", GCMZ_VERSION);
+      information, sizeof(information) / sizeof(information[0]), L"%1$hs", L"GCMZDrops %1$hs by oov", GCMZ_VERSION);
   host->set_plugin_information(information);
 
   static wchar_t layer_menu_name[64];
   ov_snprintf_wchar(layer_menu_name,
                     sizeof(layer_menu_name) / sizeof(layer_menu_name[0]),
-                    L"%s",
-                    L"%s",
+                    L"%1$hs",
+                    L"%1$hs",
                     gettext("[GCMZDrops] Paste from Clipboard"));
   host->register_layer_menu(layer_menu_name, paste_from_clipboard_handler);
 
   static wchar_t config_menu_name[64];
   ov_snprintf_wchar(config_menu_name,
                     sizeof(config_menu_name) / sizeof(config_menu_name[0]),
-                    L"%s",
-                    L"%s",
+                    L"%1$hs",
+                    L"%1$hs",
                     gettext("GCMZDrops Settings..."));
   host->register_config_menu(config_menu_name, config_menu_handler);
 
