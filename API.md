@@ -5,130 +5,190 @@
 ## 目次
 
 - [概要](#概要)
-- [API バージョン](#api-バージョン)
-- [共有メモリ構造](#共有メモリ構造)
-  - [GCMZDropsData 構造体](#gcmzdropsdata-構造体)
-  - [GCMZAPIVer フィールド](#gcmzapiver-フィールド)
-  - [Flags フィールド](#flags-フィールド)
-- [ファイルドロップ API](#ファイルドロップ-api)
-  - [JSON フォーマット（推奨）](#json-フォーマット推奨)
-  - [レガシーフォーマット（非推奨）](#レガシーフォーマット非推奨)
-- [使用例](#使用例)
-  - [C 言語による実装例](#c-言語による実装例)
 - [注意事項](#注意事項)
-
----
+- [Mutex について](#mutex-について)
+- [FileMappingObject について](#filemappingobject-について)
+- [ファイルドロップ API](#ファイルドロップ-api)
+- [実装例](#実装例)
+- [変更履歴](#変更履歴)
 
 ## 概要
 
-GCMZDrops 外部連携 API は、以下の仕組みで動作します：
+GCMZDrops 外部連携 API は、以下の仕組み利用して実現しています。
 
-1. **共有メモリ**: プロジェクト情報の取得に使用
-2. **ミューテックス**: 排他制御に使用
-3. **WM_COPYDATA**: ファイルドロップリクエストの送信に使用
+| 名前 | 用途 |
+|------|------|
+| Mutex | 排他制御 |
+| FileMappingObject | プロジェクト情報の取得 |
+| WM_COPYDATA メッセージ | ファイルドロップリクエストの送信に使用 |
 
-外部アプリケーションは共有メモリからプロジェクト情報を取得し、`WM_COPYDATA` メッセージを送信することでファイルをタイムラインにドロップできます。
+外部アプリケーションは Mutex で排他制御を行い、FileMappingObject からプロジェクト情報を取得し、SendMessageW で `WM_COPYDATA` メッセージを送信することでファイルをタイムラインにドロップできます。
 
----
+個々の説明ではなく全体像を把握したい場合は [使用例](#使用例) セクションを参照してください。
 
-## 共有メモリ構造
+## 注意事項
 
-### 名前付きオブジェクト
+外部連携 API が使えるのは最初に起動したインスタンスのみです。
 
-| オブジェクト | 名前 | 用途 |
-|-------------|------|------|
-| ミューテックス | `GCMZDropsMutex` | 排他制御 |
-| ファイルマッピング | `GCMZDrops` | プロジェクト情報の共有 |
+AviUtl ExEdit2 を多重起動しても、2 つ目以降では API は無効状態になります。
 
-### GCMZDropsData 構造体
+## Mutex について
+
+GCMZDrops は外部連携 API が有効な場合、 `GCMZDropsMutex` という名前の Mutex を作成します。  
+外部アプリケーションはこの Mutex を開き、FileMappingObject からの読み込みの際に排他制御を行う必要があります。
+
+また、API が無効な場合は Mutex が存在しないため、OpenMutexW に失敗します。  
+これを利用して、外部連携 API が利用可能かどうかを判定できます。
+
+## FileMappingObject について
+
+GCMZDrops は外部連携 API が有効な場合、 `GCMZDrops` という名前の FileMappingObject を作成します。  
+外部アプリケーションはこの FileMappingObject を開き、プロジェクト情報を取得できます。
+
+読み取る際は、Mutex を使用して排他制御を行うようにしてください。
+
+### データ構造
+
+FileMappingObject には以下の `GCMZDropsData` 構造体が格納されています。  
+過去のバージョンでは定義されていないフィールドもあるため、`GCMZAPIVer` フィールドの値を確認してから使用してください。
 
 ```c
 struct GCMZDropsData {
-  uint32_t Window;                   // API ウィンドウハンドル
-  int32_t Width;                     // 動画の幅（ピクセル）
-  int32_t Height;                    // 動画の高さ（ピクセル）
-  int32_t VideoRate;                 // フレームレート分子
-  int32_t VideoScale;                // フレームレート分母
-  int32_t AudioRate;                 // 音声サンプリングレート（Hz）
-  int32_t AudioCh;                   // 音声チャンネル数
-  int32_t GCMZAPIVer;                // API バージョン（v0.3.12 以降）
-  wchar_t ProjectPath[MAX_PATH];     // プロジェクトファイルパス（v0.3.12 以降）
-  uint32_t Flags;                    // フラグ（v0.3.23 以降、API バージョン 2 以上）
-  uint32_t AviUtl2Ver;               // AviUtl ExEdit2 バージョン（API バージョン 3 以上）
-  uint32_t GCMZVer;                  // GCMZDrops バージョン（API バージョン 3 以上）
+  uint32_t Window;
+  int32_t Width;
+  int32_t Height;
+  int32_t VideoRate;
+  int32_t VideoScale;
+  int32_t AudioRate;
+  int32_t AudioCh;
+  int32_t GCMZAPIVer;
+  wchar_t ProjectPath[260];
+  uint32_t Flags;
+  uint32_t AviUtlVer;
+  uint32_t GCMZVer;
 };
 ```
 
-#### フィールド詳細
+| フィールド    | タイプ       | GCMZAPIVer | 説明 |
+|---------------|--------------|------------|------|
+| `Window`      | uint32_t     | 0          | ファイルドロップリクエストを送信する先のウィンドウハンドル |
+| `Width`       | int32_t      | 0          | 動画の幅（ピクセル）。`0` の場合はプロジェクトが開かれていない |
+| `Height`      | int32_t      | 0          | 動画の高さ（ピクセル） |
+| `VideoRate`   | int32_t      | 0          | フレームレートの分子 |
+| `VideoScale`  | int32_t      | 0          | フレームレートの分母 |
+| `AudioRate`   | int32_t      | 0          | 音声サンプリングレート（Hz） |
+| `AudioCh`     | int32_t      | 0          | 音声チャンネル数。詳細は後述。 |
+| `GCMZAPIVer`  | int32_t      | 1          | API バージョン番号。詳細は後述。 |
+| `ProjectPath` | wchar_t[260] | 1          | プロジェクトファイルへのフルパス。詳細は後述。 |
+| `Flags`       | uint32_t     | 2          | 各種フラグ。詳細は後述。 |
+| `AviUtlVer`   | uint32_t     | 3          | AviUtl ExEdit2 のバージョン番号。詳細は後述。 |
+| `GCMZVer`     | uint32_t     | 3          | GCMZDrops のバージョン番号。詳細は後述。 |
 
-| フィールド | 説明 |
-|-----------|------|
-| `Window` | ファイルドロップリクエストを送信する先のウィンドウハンドル。`0` の場合は API が無効 |
-| `Width` | 動画の幅（ピクセル）。`0` の場合はプロジェクトが開かれていない |
-| `Height` | 動画の高さ（ピクセル） |
-| `VideoRate` | フレームレートの分子。実際の fps は `VideoRate / VideoScale` |
-| `VideoScale` | フレームレートの分母 |
-| `AudioRate` | 音声サンプリングレート（Hz） |
-| `AudioCh` | 音声チャンネル数 |
-| `GCMZAPIVer` | API バージョン番号 |
-| `ProjectPath` | プロジェクトファイルのフルパス。未保存の場合は空文字列 |
-| `Flags` | 各種フラグ（後述） |
-| `AviUtl2Ver` | AviUtl ExEdit2 のバージョン番号 |
-| `GCMZVer` | GCMZDrops のバージョン番号 |
+#### AudioCh フィールド
 
-### GCMZAPIVer フィールド
+`AudioCh` フィールドはプロジェクトの音声チャンネル数を表します。
 
-`GCMZAPIVer` フィールドは API のバージョン番号を示します。
+ただし AviUtl ExEdit2 からプロジェクトのオーディオチャンネル数の情報は提供されていないため、現在は常に `2` が割り当てられています。
 
-| バージョン | 対応環境 | 備考 |
-|----------:|---------|------|
-| 0 | AviUtl 1.00/1.10 + ExEdit 0.92 + GCMZDrops v0.3 〜 v0.3.11 | `GCMZAPIVer` フィールドが存在しないため検出不可、非推奨 |
-| 1 | AviUtl 1.00/1.10 + ExEdit 0.92 + GCMZDrops v0.3.12 〜 v0.3.22 | `GCMZAPIVer` と `ProjectPath` フィールドを追加 |
-| 2 | AviUtl 1.00/1.10 + ExEdit 0.92 + GCMZDrops v0.3.23 以降 | `Flags` フィールドを追加（翻訳パッチ検出用） |
-| 3 | AviUtl ExEdit2 + GCMZDrops v2.0 以降 | `AviUtl2Ver` と `GCMZVer` フィールドを追加、ファイルドロップ API の dwData = 2 に対応 |
+#### GCMZAPIVer フィールド
 
-### Flags フィールド
+`GCMZAPIVer` フィールドは `GCMZAPIVer == 1` 以上の環境で利用可能です。
 
-`Flags` フィールドは API バージョン 2 以上で利用可能です。
+これは API バージョン番号を表し、API 仕様の変更時に増加します。  
+ただし `0` の時点では `GCMZAPIVer` フィールド自体が存在しないため、外部アプリケーションからは検出できません。
 
-| ビット | 説明 |
-|-------|------|
+| GCMZAPIVer | リリース   | バージョン        | 備考 |
+|------------|------------|-------------------|------|
+| 0          | 2018-04-08 | GCMZDrops v0.3    | `GCMZAPIVer` フィールドが存在しないため検出不可 |
+| 1          | 2020-06-25 | GCMZDrops v0.3.12 | `GCMZAPIVer` と `ProjectPath` フィールドを追加、ファイルドロップ API の dwData = 1 に対応 |
+| 2          | 2021-08-02 | GCMZDrops v0.3.23 | `Flags` フィールドを追加 |
+| 3          | 2025-11-24 | GCMZDrops v2.0    | `AviUtlVer` と `GCMZVer` フィールドを追加、ファイルドロップ API の dwData = 2 に対応 |
+
+#### ProjectPath フィールド
+
+`ProjectPath` フィールドは `GCMZAPIVer == 1` 以上の環境で利用可能です。
+
+`ProjectPath` フィールドには、現在開かれているプロジェクトファイルのフルパスが格納されています。  
+プロジェクトが未保存の場合は空文字列（1文字目が `\0`）になります。
+
+Windows では `sizeof(wchar_t) == 2` であり、長さの `260` は `MAX_PATH` と同じ長さです。  
+実際のプロジェクトパスが `MAX_PATH` を超えている場合、259文字と終端文字に切り詰められた状態で格納されます。
+
+#### Flags フィールド
+
+`Flags` フィールドは `GCMZAPIVer == 2` 以上の環境で利用可能です。
+
+AviUtl1 で本体に翻訳パッチが適用されているかどうかを示す目的でのみ使われていました。  
+翻訳パッチが適用されている環境においては作成すべき *.exo の仕様が異なるため、外部アプリケーションが適切に対応できるようにするため二追加されました。  
+AviUtl ExEdit2 ではパッチなしで多言語対応が行われているため、このフィールは使用されません。
+
+| ビット     | 説明 |
+|------------|------|
 | 0x00000001 | 英語翻訳パッチが適用されている（AviUtl1 用） |
 | 0x00000002 | 簡体字中国語翻訳パッチが適用されている（AviUtl1 用） |
 
----
+#### AviUtlVer フィールド / GCMZVer フィールド
+
+`AviUtlVer` および `GCMZVer` フィールドは `GCMZAPIVer == 3` 以上の環境で利用可能です。
+
+`AviUtlVer` には AviUtl ExEdit2 のバージョン、`GCMZVer` には GCMZDrops のバージョンが格納されています。  
+どちらも整数値ですが、バージョン番号の表現方法が異なります。
+
+AviUtl ExEdit2 version 2.0beta24a は `2002401` として表されます。  
+GCMZDrops v2.0.0alpha9 は `67108873` として表されます。
+
+GCMZDrops のバージョンは値をビット単位で割り当てているため直感的ではありませんが、どちらのフィールドも新しいリリースほど大きな値になります。  
+もしバグ回避などの目的でバージョン判定を行いたい場合は、単純に数値の大小を比較することで、ある時期のリリースより新しいかどうかを判定できます。
 
 ## ファイルドロップ API
 
-ファイルをドロップするには、`WM_COPYDATA` メッセージを使用します。
+AviUtl ExEdit2 のタイムラインへファイルをドロップするには、`WM_COPYDATA` メッセージを SendMessageW 関数で送信します。
 
 ```c
-SendMessage(window, WM_COPYDATA, (WPARAM)sender_window, (LPARAM)&cds);
+char const json[] = "...";
+COPYDATASTRUCT cds = {
+  .dwData = 2,
+  .cbData = strlen(json),
+  .lpData = json,
+};
+SendMessageW(window, WM_COPYDATA, (WPARAM)sender_window, (LPARAM)&cds);
 ```
 
 ### COPYDATASTRUCT の構成
 
 | フィールド | 説明 |
 |-----------|------|
-| `dwData` | データフォーマット識別子（0, 1, または 2） |
+| `dwData` | データフォーマット識別子 |
 | `cbData` | データサイズ（バイト） |
 | `lpData` | データへのポインタ |
 
-#### dwData の値
+#### dwData フィールド
 
-| 値 | フォーマット | 備考 |
-|---|-------------|------|
-| 0 | レガシー（wchar_t） | 非推奨。後方互換性のためのみ |
-| 1 | JSON（UTF-8） | AviUtl ExEdit2 では `*.exo` を自動変換を試みる |
-| 2 | JSON（UTF-8） | `*.exo` 自動変換なし、`layer = 0` で選択中のレイヤー指定が可能、`margin` パラメーターが使用可能 |
+GCMZDrops へファイルドロップを行う際の、データフォーマットを指定します。  
+FileMappingObject の `GCMZAPIVer` フィールドの値に応じて、利用可能な値が異なります。
 
-AviUtl ExEdit2 では `*.exo` ファイルがサポートされていません。  
-`dwData = 0` か `dwData = 1` を使用すると GCMZDrops が `*.exo` ファイルを新形式に自動変換しますが、これは簡易的なもので多くの場合に対応できません。  
+| 値 | GCMZAPIVer | フォーマット | 備考 |
+|----|------------|--------------|------|
+| 0  | 0          | レガシー(wchar_t) | 非推奨。後方互換性のためのみ |
+| 1  | 1 or 2     | JSON(UTF-8) | 主に AviUtl1 用。AviUtl ExEdit2 では簡易的な `*.exo` の自動変換を試みる |
+| 2  | 3          | JSON(UTF-8) | `layer = 0` で選択中のレイヤーへの投げ込みが可能、`margin` パラメーターが使用可能 |
+
+AviUtl ExEdit2 ではタイムラインへの投げ込みに `*.exo` ファイルはサポートされていません。  
+`dwData = 0` か `dwData = 1` を使用すると GCMZDrops が `*.exo` ファイルを `*.object` に自動変換を試みますが、これは簡易的なもので多くの場合に対応できません。  
 最初から `*.object` 形式を使用してください。
 
-### JSON フォーマット（推奨）
+#### cbData フィールド
 
-`dwData = 1` または `dwData = 2` で使用する JSON フォーマットです。
+`cbData` フィールドには、`lpData` フィールドで指定したデータのサイズ（バイト単位）を指定します。
+
+#### lpData フィールド
+
+`lpData` フィールドには、`dwData` フィールドで指定したフォーマットのデータへのポインタを指定します。
+
+### JSON フォーマット
+
+`dwData = 2` で使用する JSON フォーマットです。  
+`dwData = 1` の場合は一部に使えない機能があることに注意してください。
 
 ```json
 {
@@ -142,20 +202,43 @@ AviUtl ExEdit2 では `*.exo` ファイルがサポートされていません�
 }
 ```
 
-#### フィールド
-
-| フィールド | 型 | 必須 | 説明 |
+| フィールド | 型 | 説明 |
 |-----------|---|-----|------|
-| `layer` | integer | いいえ | ドロップ先のレイヤー番号。マイナスのときは現在の表示位置からの想定指定、プラスのときはそのレイヤー番号、`0` の場合は選択中のレイヤー(dwData = 2 のみ) |
-| `frameAdvance` | integer | いいえ | カーソル位置からのフレームオフセット。省略時は `0`（現在のカーソル位置） |
-| `margin` | integer | いいえ | 挿入先にオブジェクトが存在する場合の処理方法（dwData = 2 のみ）。`-1`（省略時のデフォルト）：諦める、`0` 以上：後ろに指定したフレーム数分の隙間を空けて挿入 |
-| `files` | array | はい | ドロップするファイルのフルパス（UTF-8）の配列。空配列は不可 |
+| `layer` | integer | ドロップ先のレイヤー番号。省略時は `0` |
+| `frameAdvance` | integer | ドロップ後にカーソル位置を何フレーム進めるか。省略時は `0` |
+| `margin` | integer | 挿入先にオブジェクトが存在する場合の処理方法。省略時は `-1` |
+| `files` | array | ドロップするファイルのフルパス（UTF-8）の配列。空配列は不可 |
 
----
+#### layer フィールド
 
-## 使用例
+`layer` フィールドはドロップ先のレイヤーを指定します。
 
-### C 言語による実装例
+| 値 | 説明 |
+|-----------|------|
+| `0`       | 現在選択中のレイヤーへドロップ |
+| `正の整数` | そのレイヤー番号へドロップ |
+| `負の整数` | 現在の表示位置からの相対位置へドロップ。<br>タイムラインが Layer 3 から表示されているなら `-2` で Layer 4 へドロップ |
+
+#### frameAdvance フィールド
+
+`frameAdvance` フィールドは、ファイルドロップ後にタイムラインカーソルを何フレーム進めるかを指定します。
+
+#### margin フィールド
+
+`margin` フィールドは、挿入先に既にオブジェクトが存在する場合の処理方法を指定します。
+
+| 値       | 説明 |
+|----------|------|
+| `-1`     | 挿入を諦めます |
+| `0` 以上 | 既存のオブジェクトの後ろに指定したフレーム数分の隙間を空けて挿入します |
+
+#### files フィールド
+
+`files` フィールドは、ドロップするファイルのフルパス（UTF-8）の配列を指定します。
+
+## 実装例
+
+C 言語による実装例です。
 
 ```c
 #include <stdint.h>
@@ -175,7 +258,7 @@ struct GCMZDropsData {
   int32_t GCMZAPIVer;
   wchar_t ProjectPath[MAX_PATH];
   uint32_t Flags;
-  uint32_t AviUtl2Ver;
+  uint32_t AviUtlVer;
   uint32_t GCMZVer;
 };
 
@@ -185,7 +268,7 @@ int main(int argc, char *argv[]) {
   struct GCMZDropsData *p = NULL;
   BOOL mutexLocked = FALSE;
 
-  // ミューテックスを開く
+  //  Mutex を開く
   hMutex = OpenMutex(MUTEX_ALL_ACCESS, FALSE, TEXT("GCMZDropsMutex"));
   if (hMutex == NULL) {
     printf("OpenMutex failed.\n");
@@ -206,7 +289,7 @@ int main(int argc, char *argv[]) {
     goto Cleanup;
   }
 
-  // ミューテックスを取得
+  //  Mutex を取得
   if (WaitForSingleObject(hMutex, INFINITE) != WAIT_OBJECT_0) {
     printf("WaitForSingleObject failed.\n");
     goto Cleanup;
@@ -239,7 +322,7 @@ int main(int argc, char *argv[]) {
   printf("AudioRate: %d, AudioCh: %d\n", p->AudioRate, p->AudioCh);
 
   if (p->GCMZAPIVer >= 3) {
-    printf("AviUtl2Ver: %d\n", p->AviUtl2Ver);
+    printf("AviUtlVer: %d\n", p->AviUtlVer);
     printf("GCMZVer: %d\n", p->GCMZVer);
   }
 
@@ -281,52 +364,25 @@ Cleanup:
 }
 ```
 
----
-
-## 注意事項
-
-### 一般的な注意事項
-
-- **タイムラインウィンドウの表示**  
-  タイムラインウィンドウが表示されていないと、アイテムの挿入位置を判定できずに API の実行に失敗することがあります。
-
-- **挿入位置について**  
-  挿入先に既にオブジェクトがある場合、`margin` パラメーター（`dwData = 2` のみ）で動作を制御できます：
-  - `margin` が `-1`（省略時のデフォルト）の場合：挿入を諦め、想定した場所には配置されません
-  - `margin` が `0` 以上の場合：既存のオブジェクトを後ろに押しやり、指定したフレーム数分の隙間を空けて挿入します
-  
-  `dwData = 0` または `dwData = 1` を使用する場合、`margin` パラメーターは使用できず、常に `-1` の動作（挿入を諦める）となります。
-
-- **複数ファイルのドロップについて**  
-  十分なスペースがない場合は一部のファイルだけがずれた位置に配置されることがあります。
-
-- **多重起動について**  
-  API が使えるのは最初に起動したインスタンスのみです。AviUtl を多重起動しても、2 つ目以降では API は無効状態になります。
-
-### セキュリティ
-
-- ファイルパスには `..` を含むことはできません
-- ファイルパスは絶対パス（ドライブレター付き）である必要があります
-- ファイルパスの最大長は 1024 文字です
-
----
-
 ## 変更履歴
 
 ### API バージョン 3（GCMZDrops v2.0）
 
 - AviUtl ExEdit2 対応
-- `aviutl2_ver` および `gcmz_ver` フィールドを追加
-- `*.exo` ファイルの自動変換機能を追加（`dwData = 0` または `dwData = 1` の使用時のみ）
-- `dwData = 2` のときに `layer = 0` で選択中のレイヤーを指定可能に変更
-- `margin` パラメーターを追加（`dwData = 2` のみ）：挿入先にオブジェクトが存在する場合の処理方法を指定可能に
+- `AviUtlVer` および `GCMZVer` フィールドを追加
+- 選択中のレイヤーをドロップ先として指定可能にした
+- `margin` パラメーターを追加
 
 ### API バージョン 2（GCMZDrops v0.3.23）
 
-- `flags` フィールドを追加（翻訳パッチ検出用）
+- `Flags` フィールドを追加（翻訳パッチ検出用）
 
 ### API バージョン 1（GCMZDrops v0.3.12）
 
-- `gcmz_api_ver` フィールドを追加
-- `project_path` フィールドを追加
-- JSON フォーマットをサポート（`dwData = 1`）
+- `GCMZAPIVer` フィールドを追加
+- `ProjectPath` フィールドを追加
+- `dwData = 1` で JSON フォーマットをサポート
+
+### API バージョン 0（GCMZDrops v0.3）
+
+- AviUtl1 に外部のアプリケーションからファイルをドロップするための API を初実装

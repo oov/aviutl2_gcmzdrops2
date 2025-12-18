@@ -1,8 +1,8 @@
 GCMZDrops2
 ==========
 
-GCMZDrops2 は AviUtl ExEdit2 へのファイルドロップなどを拡張する汎用プラグインです。  
-動作確認は AviUtl ExEdit2 beta21 で行っています。
+GCMZDrops は AviUtl ExEdit2 へのファイルドロップなどを拡張する汎用プラグインです。  
+動作には AviUtl ExEdit2 beta24a 以降が必要です。
 
 なお、現在このプラグインは正式リリースではありません。  
 新しいバージョンが公開されている場合は速やかに新バージョンへ移行してください。
@@ -14,10 +14,10 @@ https://github.com/oov/aviutl2_gcmzdrops2/blob/master/CHANGELOG.md
 注意事項
 --------
 
-GCMZDrops2 は無保証で提供されます。  
-GCMZDrops2 を使用したこと及び使用しなかったことによるいかなる損害について、開発者は責任を負いません。
+GCMZDrops は無保証で提供されます。  
+GCMZDrops を使用したこと及び使用しなかったことによるいかなる損害について、開発者は責任を負いません。
 
-これに同意できない場合、あなたは GCMZDrops2 を使用することができません。
+これに同意できない場合、あなたは GCMZDrops を使用することができません。
 
 このプラグインは何ができる？
 ----------------------------
@@ -26,13 +26,13 @@ GCMZDrops2 を使用したこと及び使用しなかったことによるいか
   - 投げ込むファイルはプロジェクトファイルがある場所か、プラグインと同じ場所にある `GCMZShared` フォルダー内へ保存されます
 - タイムラインの右クリックメニューから `プラグイン` → `[GCMZDrops] クリップボードから貼り付け` でコピーしておいた画像やテキストを貼り付け
   - 挙動はファイルのドラッグ＆ドロップとほぼ同じです
-- 外部連携用 API を使用して他のアプリケーションからファイルを投げ込む
-  - 詳しいドキュメントは後日書きます
+- ハンドラースクリプトを記述することでファイルを投げ込むときの挙動をカスタマイズ
+- 外部連携 API を使用して他のアプリケーションからファイルを投げ込む
 
 インストール / アンインストール
 -------------------------------
 
-GCMZDrops2 にはインストーラーが付属しています。  
+GCMZDrops にはインストーラーが付属しています。  
 AviUtl ExEdit2 をインストーラーでインストールしている場合でも、ポータブルインストールしている場合でも、インストーラーを使うことで簡単にインストールできます。
 
 アンインストールは、スタートボタンを右クリックして `インストールされているアプリ` から GCMZDrops を選択してアンインストールしてください。  
@@ -52,58 +52,27 @@ AviUtl ExEdit2 のメニューから以下のように辿ると設定ダイア�
 
 後で詳しく書くかも知れませんが、どうせこんなとこ誰も見てないし、どうしよっかな……。
 
-既知の問題について
-------------------
+ハンドラースクリプト
+--------------------
 
-### AviUtl ExEdit2 のバージョンに対する制限
+GCMZDrops では、Lua スクリプトを記述することでファイルドロップやクリップボード貼り付け時に独自の処理を挟み込むことができます。  
+これにより本来は非対応なファイル形式に対して独自の処理を挟み込んで読み込める形に変形したり、Shiftキーが押されているときだけ動作を変えるなど、挙動をカスタマイズできます。
 
-現在の GCMZDrops2 は、本体側が未知のバージョンだと一部の機能が使用できなくなります。
+ハンドラースクリプトの詳細については以下のドキュメントを参照してください。  
+GCMZDrops はまだ正式リリースではないため、予告なく仕様変更が行われる可能性があることにご留意ください。
 
-- 外部連携用 API
+https://github.com/oov/aviutl2_gcmzdrops2/blob/main/LUA.md
 
-未知のバージョンと組み合わせて使用している場合、起動時にログへ警告が表示されます。  
-どこまでが対応バージョンなのかは更新履歴などを参照して下さい。
+外部連携 API
+------------
 
-### 外部連携用 API の動作について
+GCMZDrops には外部のアプリケーションからファイルを投げ込むための API が用意されています。  
+これは Mutex, FileMappingObject, WM_COPYDATA メッセージにて実現されています。
 
-外部連携用 API は以前とほぼ同じ仕組みで存在していますが、タイムラインへの *.exo の投げ込みはできません。  
-以前と同じようなことをしたい場合は *.object を投げ込む必要があることに注意してください。  
-（本体側で同等の動作を行うためのファイル形式が *.object に変わったためです）
+外部連携 API の詳細については以下のドキュメントを参照してください。
+GCMZDrops はまだ正式リリースではないため、予告なく仕様変更が行われる可能性があることにご留意ください。
 
-基本的な使い方は以前のドキュメントを参考にして下さい。
-
-https://github.com/oov/aviutl_gcmzdrops?tab=readme-ov-file#%E5%A4%96%E9%83%A8%E9%80%A3%E6%90%BA%E7%94%A8-api-%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6
-
-共有メモリー上の構造体は以下の形に拡張されています。  
-AviUtl2Version や GCMZDropsVersion には直接アクセスせず、  
-まず GCMZAPIVer が 3 以上であることを確認し、その後に参照するようにしてください。
-
-また、GCMZAPIVer が 3 以上である場合、*.exo ではなく *.object を投げ込む必要があります。
-
-```c
-struct GCMZDropsData {
-  uint32_t Window;
-  int32_t Width;
-  int32_t Height;
-  int32_t VideoRate;
-  int32_t VideoScale;
-  int32_t AudioRate;
-  int32_t AudioCh;
-  int32_t GCMZAPIVer; /* 1 = v0.3.12 以降 / 2 = v0.3.23 以降 / 3 = v2.0alpha1 以降 */
-  wchar_t ProjectPath[MAX_PATH];
-  uint32_t Flags; /* GCMZAPIVer が 2 以上なら存在する */
-  uint32_t AviUtl2Version; /* GCMZAPIVer が 3 以上なら存在する */
-  uint32_t GCMZDropsVersion; /* GCMZAPIVer が 3 以上なら存在する */
-};
-```
-
-現時点では外部連携用 API で投げ込む場合だけは簡易的な *.exo -> *.object 変換が行われますが、これはごく簡単なものしか対応できていません。  
-また、この自動変換の仕組みは将来的に廃止する可能性が高いです。
-
-### Lua 関連機能が未実装
-
-Lua スクリプト関連の機能はまだ実用段階にはありません。  
-また、維持するコストがメリットに見合わないため以前との互換性は維持しない予定です。
+https://github.com/oov/aviutl2_gcmzdrops2/blob/main/API.md
 
 ダウンロード
 ------------
@@ -114,7 +83,7 @@ https://github.com/oov/aviutl2_gcmzdrops2/releases
 ------------------------
 
 [Git Bash](https://gitforwindows.org/) + [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) 上で開発し、リリース用ファイルは GitHub Actions にて自動生成しています。  
-ビルド方法や必要になるパッケージなどは [GitHub Actions の設定ファイル](https://github.com/oov/aviutl_psdtoolkit/blob/main/.github/workflows/releaser.yml) を参照してください。
+ビルド方法や必要になるパッケージなどは [GitHub Actions の設定ファイル](https://github.com/oov/aviutl2_gcmzdrops2/blob/main/.github/workflows/releaser.yml) を参照してください。
 
 残ってしまった一時ファイルの自動削除について
 --------------------------------------------
@@ -133,7 +102,7 @@ Contributors
 Credits
 -------
 
-GCMZDrops2 is made possible by the following open source softwares.
+GCMZDrops is made possible by the following open source softwares.
 
 ### [Acutest](https://github.com/mity/acutest)
 
@@ -192,28 +161,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-```
-</details>
-
-### [c25519](https://www.dlbeer.co.nz/oss/c25519.html)
-
-<details>
-<summary>Public Domain</summary>
-
-```
-This entire package is in the public domain.
-
-Curve25519 and Ed25519 for low-memory systems
-Daniel Beer <dlbeer@gmail.com>
-
-This package contains portable public-domain implementations of Daniel
-J. Bernstein's Curve25519 Diffie-Hellman function, and of the
-Ed25519 signature system. The memory consumption is low enough that
-they could be reasonably considered for most microcontroller
-applications.
-
-All functions are implemented in a way which yields constant execution
-time with respect to secret data.
 ```
 </details>
 
@@ -691,36 +638,6 @@ For more information, please refer to <http://unlicense.org/>
 ```
 </details>
 
-### [The Platinum Searcher](https://github.com/monochromegane/the_platinum_searcher)
-
-<details>
-<summary>The MIT License</summary>
-
-```
-The MIT License (MIT)
-
-Copyright (c) [2014] [the_platinum_searcher]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-</details>
-
 ### [TinyCThread](https://github.com/tinycthread/tinycthread)
 
 NOTICE: This program used [a modified version of TinyCThread](https://github.com/oov/tinycthread).
@@ -797,4 +714,3 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 </details>
-
