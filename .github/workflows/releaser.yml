@@ -45,11 +45,18 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "build/Release/dist/gcmzdrops_*.zip"
+      - name: Prepare attestation for upload
+        shell: bash
+        run: |
+          VERSION="${{ steps.get_version.outputs.tag }}"
+          mkdir -p attestations
+          cp "${{ steps.attest-zip.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl"
       - name: Upload attestation for zip
         uses: actions/upload-artifact@v4
         with:
           name: attestation-zip
-          path: ${{ steps.attest-zip.outputs.bundle-path }}
+          path: attestations/
+          retention-days: 1
 
   installer-and-release:
     runs-on: windows-latest
@@ -81,12 +88,11 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "build/Release/dist/gcmzdrops_*_setup.exe"
-      - name: Rename attestation files
+      - name: Prepare installer attestation
         shell: bash
         run: |
           VERSION="${{ needs.build.outputs.version }}"
           cp "${{ steps.attest-installer.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"
-          mv attestations/*.jsonl "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl" || true
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.CREATE_RELEASE_SECRET }}
