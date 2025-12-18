@@ -426,11 +426,11 @@ static INT_PTR init_dialog(HWND dialog, struct dialog_data *data) {
     TCITEMW item = {0};
     item.mask = TCIF_TEXT;
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, gettext("Settings"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("config_dialog", "Settings"));
     item.pszText = buf;
     SendMessageW(tab, TCM_INSERTITEMW, (WPARAM)tab_index_settings, (LPARAM)&item);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, gettext("Handlers"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("config_dialog", "Handlers"));
     item.pszText = buf;
     SendMessageW(tab, TCM_INSERTITEMW, (WPARAM)tab_index_handlers, (LPARAM)&item);
 
@@ -445,19 +445,19 @@ static INT_PTR init_dialog(HWND dialog, struct dialog_data *data) {
     LVCOLUMNW col = {0};
     col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, gettext("Name"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Name"));
     col.pszText = buf;
     col.cx = 120;
     col.iSubItem = 0;
     SendMessageW(list, LVM_INSERTCOLUMNW, 0, (LPARAM)&col);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, gettext("Priority"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Priority"));
     col.pszText = buf;
     col.cx = 60;
     col.iSubItem = 1;
     SendMessageW(list, LVM_INSERTCOLUMNW, 1, (LPARAM)&col);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, gettext("Source"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Source"));
     col.pszText = buf;
     col.cx = 150;
     col.iSubItem = 2;
