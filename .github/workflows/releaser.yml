@@ -41,9 +41,15 @@ jobs:
             build/Release/x86_64/src/c/version.env
             build/Release/dist/
       - name: Attest build artifacts
+        id: attest-zip
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "build/Release/dist/gcmzdrops_*.zip"
+      - name: Upload attestation for zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestation-zip
+          path: ${{ steps.attest-zip.outputs.bundle-path }}
 
   installer-and-release:
     runs-on: windows-latest
@@ -57,6 +63,11 @@ jobs:
         with:
           name: build-artifacts
           path: build/Release/
+      - name: Download attestation for zip
+        uses: actions/download-artifact@v4
+        with:
+          name: attestation-zip
+          path: attestations/
       - name: Install Inno Setup
         shell: pwsh
         run: |
@@ -66,9 +77,16 @@ jobs:
         run: |
           bash build.bash --skip-tests --installer
       - name: Attest installer
+        id: attest-installer
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "build/Release/dist/gcmzdrops_*_setup.exe"
+      - name: Rename attestation files
+        shell: bash
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          cp "${{ steps.attest-installer.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"
+          mv attestations/*.jsonl "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl" || true
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.CREATE_RELEASE_SECRET }}
@@ -82,4 +100,6 @@ jobs:
             --title "${VERSION}" \
             --notes-file release_notes.md \
             "build/Release/dist/gcmzdrops_${VERSION}.zip" \
-            "build/Release/dist/gcmzdrops_${VERSION}_setup.exe"
+            "build/Release/dist/gcmzdrops_${VERSION}_setup.exe" \
+            "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl" \
+            "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"
