@@ -340,6 +340,12 @@ files[1] = {
 -- PNG ファイルを処理するハンドラー
 local M = {}
 
+M.name = i18n({
+  ja_JP = [=[PNGファイルハンドラーテスト]=],
+  en_US = [=[PNG File Handler Test]=],
+  zh_CN = [=[PNG文件处理程序测试]=],
+})
+
 M.priority = 500  -- 高めの優先度
 
 function M.drag_enter(files, state)
@@ -374,11 +380,17 @@ return M
 -- 例: 「マリリンマンソン」を「マソソソマソソソ」に置換
 local M = {}
 
-M.priority = 800
+M.name = i18n({
+  ja_JP = [=[マリリンマンソン置換ハンドラー]=],
+  en_US = [=[Marilyn Manson Replacement Handler]=],
+  zh_CN = [=[玛丽莲·曼森替换处理程序]=],
+})
+
+M.priority = 1000
 
 function M.drag_enter(files, state)
   for _, file in ipairs(files) do
-    if file.mimetype == "text/plain" then
+    if file.filepath:sub(-4):lower() == ".txt" then
       return true
     end
   end
@@ -387,7 +399,7 @@ end
 
 function M.drop(files, state)
   for i, file in ipairs(files) do
-    if file.mimetype == "text/plain" then
+    if file.filepath:sub(-4):lower() == ".txt" then
       -- ファイルを読み込む
       local f = io.open(file.filepath, "rb")
       if f then
@@ -408,7 +420,7 @@ function M.drop(files, state)
             files[i] = {
               filepath = temp_path,
               mimetype = "text/plain",
-              temporary = true
+              temporary = true,
             }
           end
         end
