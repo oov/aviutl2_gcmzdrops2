@@ -1519,6 +1519,15 @@ static void on_ready(void *const userdata) {
     return;
   }
 
+  // FIXME:
+  // As of version2.0beta24a, even if you register a handler with host->register_project_load_handler() in
+  // RegisterPlugin, the handler is not called only when a new project is automatically created at the beginning of a
+  // normal startup. Also, calling host->create_edit_handle()->get_edit_info() in RegisterPlugin causes a crash. The
+  // same applies to host->create_edit_handle()->call_edit_section() and
+  // host->create_edit_handle()->call_edit_section_param(). Because of this, there is no appropriate timing to get
+  // project settings only when creating a new project, and there is no appropriate initialization timing for the
+  // external cooperation API. Therefore, at present, this is avoided by treating the timing of WM_USER or WM_MOUSEMOVE
+  // coming to the main window as the completion of initialization.
   mtx_lock(&ctx->init_mtx);
   ctx->plugin_state = gcmzdrops_plugin_state_registered;
   cnd_signal(&ctx->init_cond);
