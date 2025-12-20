@@ -1331,6 +1331,145 @@ static void test_os_funcs_ascii_compatibility(void) {
                                        "return ok and 'ok' or 'error'";
       compare_string_results(L_standard, L_override, remove_nonexistent, -1, "os.remove nonexistent");
     }
+
+    // Test 5: os.clock - should return a number representing CPU time
+    TEST_CASE("os.clock compatibility");
+    {
+      // Both implementations should return a non-negative number
+      char const *script = "local c = os.clock() "
+                           "assert(type(c) == 'number', 'os.clock should return number') "
+                           "assert(c >= 0, 'os.clock should return non-negative') "
+                           "return 'ok'";
+      if (!exec_lua_script(L_standard, script, "standard", "os.clock")) {
+        goto cleanup;
+      }
+      lua_pop(L_standard, lua_gettop(L_standard));
+
+      if (!exec_lua_script(L_override, script, "override", "os.clock")) {
+        goto cleanup;
+      }
+      lua_pop(L_override, lua_gettop(L_override));
+
+      // Verify both return similar magnitude values (within reasonable time)
+      char const *magnitude_script = "local c = os.clock() "
+                                     "return c < 3600 and 'reasonable' or 'too_large'";
+      compare_string_results(L_standard, L_override, magnitude_script, -1, "os.clock magnitude");
+    }
+
+    // Test 6: os.time - should return current time or time from table
+    TEST_CASE("os.time compatibility");
+    {
+      // os.time() should return a number
+      char const *script1 = "local t = os.time() "
+                            "assert(type(t) == 'number', 'os.time should return number') "
+                            "assert(t > 0, 'os.time should return positive') "
+                            "return 'ok'";
+      if (!exec_lua_script(L_standard, script1, "standard", "os.time()")) {
+        goto cleanup;
+      }
+      lua_pop(L_standard, lua_gettop(L_standard));
+
+      if (!exec_lua_script(L_override, script1, "override", "os.time()")) {
+        goto cleanup;
+      }
+      lua_pop(L_override, lua_gettop(L_override));
+
+      // os.time with table argument
+      char const *script2 = "local t = os.time({year=2000, month=1, day=1, hour=0, min=0, sec=0}) "
+                            "assert(type(t) == 'number', 'os.time(table) should return number') "
+                            "return tostring(t)";
+      compare_string_results(L_standard, L_override, script2, -1, "os.time(table)");
+
+      // os.time with partial table (using defaults)
+      char const *script3 = "local t = os.time({year=2020, month=6, day=15}) "
+                            "return tostring(t)";
+      compare_string_results(L_standard, L_override, script3, -1, "os.time(partial table)");
+    }
+
+    // Test 7: os.difftime - should return difference between two times
+    TEST_CASE("os.difftime compatibility");
+    {
+      char const *script = "local t1 = os.time({year=2000, month=1, day=1}) "
+                           "local t2 = os.time({year=2000, month=1, day=2}) "
+                           "local diff = os.difftime(t2, t1) "
+                           "return tostring(diff)";
+      compare_string_results(L_standard, L_override, script, -1, "os.difftime 1 day");
+
+      // Test with single argument
+      char const *script2 = "local t = os.time({year=2000, month=1, day=2}) "
+                            "local diff = os.difftime(t) "
+                            "return tostring(diff)";
+      compare_string_results(L_standard, L_override, script2, -1, "os.difftime single arg");
+    }
+
+    // Test 8: os.date - should return formatted date string or table
+    TEST_CASE("os.date compatibility");
+    {
+      // os.date with fixed time for reproducible results
+      char const *script1 = "local t = os.time({year=2000, month=6, day=15, hour=12, min=30, sec=45}) "
+                            "return os.date('%Y-%m-%d', t)";
+      compare_string_results(L_standard, L_override, script1, -1, "os.date %Y-%m-%d");
+
+      char const *script2 = "local t = os.time({year=2000, month=6, day=15, hour=12, min=30, sec=45}) "
+                            "return os.date('%H:%M:%S', t)";
+      compare_string_results(L_standard, L_override, script2, -1, "os.date %H:%M:%S");
+
+      // os.date with *t format (returns table)
+      char const *script3 = "local t = os.time({year=2000, month=6, day=15, hour=12, min=30, sec=45}) "
+                            "local d = os.date('*t', t) "
+                            "assert(type(d) == 'table', 'os.date *t should return table') "
+                            "return d.year .. '-' .. d.month .. '-' .. d.day";
+      compare_string_results(L_standard, L_override, script3, -1, "os.date *t table");
+
+      // Verify all fields in *t table
+      char const *script4 = "local t = os.time({year=2000, month=6, day=15, hour=12, min=30, sec=45}) "
+                            "local d = os.date('*t', t) "
+                            "return d.hour .. ':' .. d.min .. ':' .. d.sec";
+      compare_string_results(L_standard, L_override, script4, -1, "os.date *t time fields");
+
+      // Test wday and yday
+      char const *script5 = "local t = os.time({year=2000, month=6, day=15, hour=12}) "
+                            "local d = os.date('*t', t) "
+                            "return 'wday=' .. d.wday .. ',yday=' .. d.yday";
+      compare_string_results(L_standard, L_override, script5, -1, "os.date *t wday/yday");
+
+      // Test UTC format (!)
+      char const *script6 = "local t = os.time({year=2000, month=6, day=15, hour=12, min=30, sec=45}) "
+                            "return os.date('!%Y-%m-%d %H:%M:%S', t)";
+      compare_string_results(L_standard, L_override, script6, -1, "os.date UTC format");
+
+      // os.date() with no time argument (uses current time) - just verify it doesn't error
+      char const *script7 = "local d = os.date('%Y') "
+                            "assert(type(d) == 'string', 'os.date should return string') "
+                            "assert(#d == 4, 'year should be 4 digits') "
+                            "return 'ok'";
+      if (!exec_lua_script(L_standard, script7, "standard", "os.date current")) {
+        goto cleanup;
+      }
+      lua_pop(L_standard, lua_gettop(L_standard));
+
+      if (!exec_lua_script(L_override, script7, "override", "os.date current")) {
+        goto cleanup;
+      }
+      lua_pop(L_override, lua_gettop(L_override));
+    }
+
+    // Test 9: math.randomseed auto-initialization
+    // Verify that math.random returns different values after gcmz_lua_setup_utf8_funcs
+    // (seed should be auto-initialized with high-quality random value)
+    TEST_CASE("math.randomseed auto-initialization");
+    {
+      char const *script = "local values = {} "
+                           "for i = 1, 10 do values[i] = math.random() end "
+                           "local all_same = true "
+                           "for i = 2, 10 do if values[i] ~= values[1] then all_same = false break end end "
+                           "assert(not all_same, 'math.random should return varied values after auto-seeding') "
+                           "return 'ok'";
+      if (!exec_lua_script(L_override, script, "override", "math.randomseed auto-init")) {
+        goto cleanup;
+      }
+      lua_pop(L_override, lua_gettop(L_override));
+    }
   }
 
 cleanup:

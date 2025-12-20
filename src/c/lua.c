@@ -9,6 +9,7 @@
 #include <ovarray.h>
 #include <ovmo.h>
 #include <ovprintf.h>
+#include <ovrand.h>
 #include <ovutf.h>
 
 #ifdef __GNUC__
@@ -650,6 +651,20 @@ NODISCARD bool gcmz_lua_create(struct gcmz_lua_context **const ctx, struct ov_er
     }
     luaL_openlibs(c->L);
     gcmz_lua_setup_utf8_funcs(c->L);
+
+    // Initialize math.randomseed
+    lua_getglobal(c->L, "math");
+    if (lua_istable(c->L, -1)) {
+      lua_getfield(c->L, -1, "randomseed");
+      if (lua_isfunction(c->L, -1)) {
+        uint64_t const seed = ov_rand_get_global_hint();
+        lua_pushnumber(c->L, (lua_Number)seed);
+        lua_call(c->L, 1, 0);
+      } else {
+        lua_pop(c->L, 1); // Pop non-function
+      }
+    }
+    lua_pop(c->L, 1); // Pop math
   }
 
   *ctx = c;

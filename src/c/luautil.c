@@ -10,7 +10,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static NODISCARD bool error_to_string(struct ov_error const *const e, char **const dest, struct ov_error *const err) {
   if (!e || !dest) {
@@ -2066,6 +2068,145 @@ static int io_tmpfile_utf8(lua_State *L) {
 }
 
 /**
+ * @brief os.clock() - Returns CPU time used by the program
+ *
+ * Returns an approximation of the amount of CPU time used by the program, in seconds.
+ */
+static int os_clock_impl(lua_State *L) {
+  clock_t const c = clock();
+  lua_pushnumber(L, (lua_Number)c / (lua_Number)CLOCKS_PER_SEC);
+  return 1;
+}
+
+/**
+ * @brief os.time([table]) - Returns current time or time from table
+ *
+ * Returns the current time when called without arguments, or a time representing
+ * the date and time specified by the given table.
+ */
+static int os_time_impl(lua_State *L) {
+  time_t t;
+  if (lua_isnoneornil(L, 1)) {
+    t = time(NULL);
+  } else {
+    struct tm ts;
+    luaL_checktype(L, 1, LUA_TTABLE);
+    lua_getfield(L, 1, "sec");
+    ts.tm_sec = (int)luaL_optinteger(L, -1, 0);
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "min");
+    ts.tm_min = (int)luaL_optinteger(L, -1, 0);
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "hour");
+    ts.tm_hour = (int)luaL_optinteger(L, -1, 12);
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "day");
+    ts.tm_mday = (int)luaL_optinteger(L, -1, 1);
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "month");
+    ts.tm_mon = (int)luaL_optinteger(L, -1, 1) - 1;
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "year");
+    ts.tm_year = (int)luaL_optinteger(L, -1, 1900) - 1900;
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "isdst");
+    ts.tm_isdst = lua_isnil(L, -1) ? -1 : (lua_toboolean(L, -1) ? 1 : 0);
+    lua_pop(L, 1);
+    t = mktime(&ts);
+    if (t == (time_t)(-1)) {
+      return luaL_error(L, "time result cannot be represented in this installation");
+    }
+  }
+  lua_pushnumber(L, (lua_Number)t);
+  return 1;
+}
+
+/**
+ * @brief os.difftime(t2, t1) - Returns the difference in seconds between two times
+ */
+static int os_difftime_impl(lua_State *L) {
+  lua_Number const t1 = luaL_checknumber(L, 1);
+  lua_Number const t2 = luaL_optnumber(L, 2, 0);
+  lua_pushnumber(L, difftime((time_t)t1, (time_t)t2));
+  return 1;
+}
+
+/**
+ * @brief Push tm fields to a table on the stack
+ */
+static void push_tm_table(lua_State *L, struct tm const *ts, int isdst) {
+  lua_createtable(L, 0, 9);
+  lua_pushinteger(L, ts->tm_sec);
+  lua_setfield(L, -2, "sec");
+  lua_pushinteger(L, ts->tm_min);
+  lua_setfield(L, -2, "min");
+  lua_pushinteger(L, ts->tm_hour);
+  lua_setfield(L, -2, "hour");
+  lua_pushinteger(L, ts->tm_mday);
+  lua_setfield(L, -2, "day");
+  lua_pushinteger(L, ts->tm_mon + 1);
+  lua_setfield(L, -2, "month");
+  lua_pushinteger(L, ts->tm_year + 1900);
+  lua_setfield(L, -2, "year");
+  lua_pushinteger(L, ts->tm_wday + 1);
+  lua_setfield(L, -2, "wday");
+  lua_pushinteger(L, ts->tm_yday + 1);
+  lua_setfield(L, -2, "yday");
+  lua_pushboolean(L, isdst);
+  lua_setfield(L, -2, "isdst");
+}
+
+/**
+ * @brief os.date([format [, time]]) - Returns formatted date/time string or table
+ */
+static int os_date_impl(lua_State *L) {
+  char const *fmt = luaL_optstring(L, 1, "%c");
+  time_t t;
+  if (lua_isnoneornil(L, 2)) {
+    t = time(NULL);
+  } else {
+    lua_Number const n = lua_tonumber(L, 2);
+    t = (time_t)n;
+  }
+  struct tm *ts;
+  bool use_utc = false;
+
+  if (*fmt == '!') {
+    use_utc = true;
+    fmt++;
+  }
+
+  ts = use_utc ? gmtime(&t) : localtime(&t);
+  if (ts == NULL) {
+    return luaL_error(L, "date result cannot be represented in this installation");
+  }
+
+  if (strcmp(fmt, "*t") == 0) {
+    push_tm_table(L, ts, ts->tm_isdst);
+    return 1;
+  }
+
+  // Format string
+  char buf[256];
+  size_t const len = strftime(buf, sizeof(buf), fmt, ts);
+  if (len == 0) {
+    return luaL_error(L, "date format too long");
+  }
+  lua_pushlstring(L, buf, len);
+  return 1;
+}
+
+/**
+ * @brief os.exit([code [, close]]) - Terminates the host program
+ *
+ * Note: This is disabled for safety in plugin environment.
+ */
+static int os_exit_impl(lua_State *L) {
+  (void)L;
+  return luaL_error(L, "os.exit is disabled in plugin environment");
+}
+
+/**
  * @brief os.execute([command]) - UTF-8 aware version
  *
  * Executes a shell command. Returns true/nil, "exit"/"signal", exit_code.
@@ -2369,14 +2510,37 @@ static int os_setlocale_disabled(lua_State *L) {
 
 /**
  * @brief Setup UTF-8 aware os library functions
+ *
+ * If the os library doesn't exist (e.g., LuaJIT built without os library),
+ * this function creates the os table and provides all os functions.
  */
 static void setup_os_utf8_funcs(lua_State *L) {
   lua_getglobal(L, "os");
   if (!lua_istable(L, -1)) {
+    // os library doesn't exist, create it
     lua_pop(L, 1);
-    return;
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setglobal(L, "os");
   }
 
+  // Core time functions (always provide our implementation)
+  lua_pushcfunction(L, os_clock_impl);
+  lua_setfield(L, -2, "clock");
+
+  lua_pushcfunction(L, os_time_impl);
+  lua_setfield(L, -2, "time");
+
+  lua_pushcfunction(L, os_date_impl);
+  lua_setfield(L, -2, "date");
+
+  lua_pushcfunction(L, os_difftime_impl);
+  lua_setfield(L, -2, "difftime");
+
+  lua_pushcfunction(L, os_exit_impl);
+  lua_setfield(L, -2, "exit");
+
+  // UTF-8 aware functions
   lua_pushcfunction(L, os_execute_utf8);
   lua_setfield(L, -2, "execute");
 
