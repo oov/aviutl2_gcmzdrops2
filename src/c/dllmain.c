@@ -105,6 +105,9 @@ cleanup:
   return result;
 }
 
+DWORD __declspec(dllexport) GetVersion(void);
+DWORD __declspec(dllexport) GetVersion(void) { return GCMZ_VERSION_UINT32; }
+
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger);
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) { gcmz_logf_set_handle(logger); }
 
