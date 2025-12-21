@@ -476,7 +476,7 @@ static aviutl2_object_handle insert_files_to_timeline(struct gcmz_file_list cons
   for (size_t i = 0; i < count; ++i) {
     struct gcmz_file const *const file = gcmz_file_list_get(file_list, i);
     if (!file || !file->path) {
-      gcmz_logf_warn(NULL, "%1$ls", gettext("skipping invalid file in list"));
+      gcmz_logf_warn(NULL, "%1$hs", "%1$hs", gettext("skipping invalid file in list"));
       continue;
     }
     wchar_t const *const ext = wcsrchr(file->path, L'.');
@@ -552,7 +552,7 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
   aviutl2_object_handle obj =
       insert_files_to_timeline(file_list, paste_ctx->edit, paste_ctx->layer, paste_ctx->frame, &err);
   if (!obj) {
-    gcmz_logf_error(NULL, "%1$ls", "%1$ls", gettext("failed to insert files into timeline"));
+    gcmz_logf_error(NULL, "%1$hs", "%1$hs", gettext("failed to insert files into timeline"));
     OV_ERROR_DESTROY(&err);
     return;
   }
@@ -617,8 +617,7 @@ static void on_drop_completion(struct gcmz_file_list const *const file_list, voi
   struct ov_error err = {0};
   aviutl2_object_handle const obj = insert_files_to_timeline(file_list, edit, layer, frame, &err);
   if (!obj) {
-    gcmz_logf_error(NULL, "%1$ls", "%1$ls", gettext("failed to insert files into timeline"));
-    OV_ERROR_DESTROY(&err);
+    gcmz_logf_error(NULL, "%1$hs", "%1$hs", gettext("failed to insert files into timeline"));
     return;
   }
   edit->set_focus_object(obj);
@@ -986,7 +985,7 @@ static void tray_menu_debug_output(void *userdata, struct gcmz_tray_callback_eve
 }
 
 static void tray_menu_test_complete_external_api(struct gcmz_api_request_params *const params) {
-  gcmz_logf_info(NULL, "%s", "%s", "API request test completed");
+  gcmz_logf_info(NULL, "%1$hs", "%1$hs", "API request test completed");
   if (params && params->files) {
     gcmz_file_list_destroy(&params->files);
   }
@@ -1069,7 +1068,7 @@ static void tray_menu_test_external_api(void *userdata, struct gcmz_tray_callbac
       gcmz_file_list_destroy(&files);
     }
     if (!result) {
-      gcmz_logf_error(&err, "%s", "%s", "failed to test API request");
+      gcmz_logf_error(&err, "%1$hs", "%1$hs", "failed to test API request");
       OV_ERROR_REPORT(&err, NULL);
     }
     break;
@@ -1078,7 +1077,7 @@ static void tray_menu_test_external_api(void *userdata, struct gcmz_tray_callbac
 }
 
 static void tray_menu_test_complete_external_api_object(struct gcmz_api_request_params *const params) {
-  gcmz_logf_info(NULL, "%s", "%s", "API request test (object) completed");
+  gcmz_logf_info(NULL, "%1$hs", "%1$hs", "API request test (object) completed");
   if (params && params->files) {
     gcmz_file_list_destroy(&params->files);
   }
@@ -1217,7 +1216,7 @@ static void tray_menu_test_external_api_object(void *userdata, struct gcmz_tray_
       gcmz_file_list_destroy(&files);
     }
     if (!result) {
-      gcmz_logf_error(&err, "%s", "%s", "failed to test API request (object)");
+      gcmz_logf_error(&err, "%1$hs", "%1$hs", "failed to test API request (object)");
       OV_ERROR_REPORT(&err, NULL);
     }
     break;
@@ -1613,7 +1612,7 @@ static void on_change_activate(void *const userdata) {
       if (ctx->drop) {
         for (size_t i = 0; i < found; ++i) {
           if (!gcmz_drop_register_window(ctx->drop, windows[i], &err)) {
-            gcmz_logf_warn(&err, "%s", "%s", "failed to register window for drag and drop");
+            gcmz_logf_warn(&err, "%1$hs", "%1$hs", "failed to register window for drag and drop");
             OV_ERROR_DESTROY(&err);
           }
         }
@@ -1905,7 +1904,7 @@ static void delayed_initialization(void *userdata) {
 
 cleanup:
   if (!success) {
-    gcmz_logf_error(&err, "%s", "%s", gettext("failed to complete delayed initialization"));
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to complete delayed initialization"));
     OV_ERROR_DESTROY(&err);
   }
 
