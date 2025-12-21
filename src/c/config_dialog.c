@@ -52,7 +52,13 @@ enum {
 
 enum {
   tab_index_settings = 0,
-  tab_index_handlers = 1,
+  tab_index_scripts = 1,
+};
+
+// Script type constants for sorting
+enum {
+  script_type_handler = 1,
+  script_type_module = 2,
 };
 
 static NATIVE_CHAR const g_config_dialog_prop_name[] = L"GCMZConfigDialogData";
@@ -61,6 +67,8 @@ struct dialog_data {
   struct gcmz_config *config;
   gcmz_config_dialog_enum_handlers_fn enum_handlers;
   void *enum_handlers_context;
+  gcmz_config_dialog_enum_script_modules_fn enum_script_modules;
+  void *enum_script_modules_context;
   struct config_dialog_tooltip *tooltip;
   struct config_dialog_combo_tooltip *combo_tooltip;
   bool external_api_running;
@@ -430,9 +438,9 @@ static INT_PTR init_dialog(HWND dialog, struct dialog_data *data) {
     item.pszText = buf;
     SendMessageW(tab, TCM_INSERTITEMW, (WPARAM)tab_index_settings, (LPARAM)&item);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("config_dialog", "Handlers"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("config_dialog", "Script Info"));
     item.pszText = buf;
-    SendMessageW(tab, TCM_INSERTITEMW, (WPARAM)tab_index_handlers, (LPARAM)&item);
+    SendMessageW(tab, TCM_INSERTITEMW, (WPARAM)tab_index_scripts, (LPARAM)&item);
 
     data->current_tab = tab_index_settings;
   }
@@ -445,25 +453,31 @@ static INT_PTR init_dialog(HWND dialog, struct dialog_data *data) {
     LVCOLUMNW col = {0};
     col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Name"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("script_info", "Type"));
     col.pszText = buf;
-    col.cx = 120;
+    col.cx = 90;
     col.iSubItem = 0;
     SendMessageW(list, LVM_INSERTCOLUMNW, 0, (LPARAM)&col);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Priority"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("script_info", "Name"));
     col.pszText = buf;
-    col.cx = 60;
+    col.cx = 100;
     col.iSubItem = 1;
     SendMessageW(list, LVM_INSERTCOLUMNW, 1, (LPARAM)&col);
 
-    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("handler_script", "Source"));
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("script_info", "Priority"));
     col.pszText = buf;
-    col.cx = 150;
+    col.cx = 50;
     col.iSubItem = 2;
     SendMessageW(list, LVM_INSERTCOLUMNW, 2, (LPARAM)&col);
 
-    // Hide handlers list initially (Settings tab is shown first)
+    ov_snprintf_wchar(buf, sizeof(buf) / sizeof(WCHAR), ph, ph, pgettext("script_info", "Source"));
+    col.pszText = buf;
+    col.cx = 150;
+    col.iSubItem = 3;
+    SendMessageW(list, LVM_INSERTCOLUMNW, 3, (LPARAM)&col);
+
+    // Hide scripts list initially (Settings tab is shown first)
     ShowWindow(list, SW_HIDE);
   }
 
@@ -494,7 +508,7 @@ static int const settings_tab_controls[] = {
 };
 
 // Handlers tab controls (shown/hidden when switching tabs)
-static int const handlers_tab_controls[] = {
+static int const scripts_tab_controls[] = {
     id_list_handlers,
 };
 
@@ -507,48 +521,91 @@ static void show_tab_controls(HWND dialog, int const *controls, size_t count, in
   }
 }
 
-struct handler_enum_context {
-  HWND list;
-  int index;
+// Script entry structure for collecting and sorting
+struct script_entry {
+  int type;         // script_type_handler or script_type_module
+  int priority;     // Only meaningful for handlers
+  char name[256];   // Script/module name (UTF-8)
+  char source[512]; // Source path (UTF-8)
 };
 
-static bool handler_enum_callback(char const *name, int priority, char const *source, void *userdata) {
-  struct handler_enum_context *ctx = (struct handler_enum_context *)userdata;
-  if (!ctx || !ctx->list) {
+static int compare_script_entries(void const *a, void const *b) {
+  struct script_entry const *ea = (struct script_entry const *)a;
+  struct script_entry const *eb = (struct script_entry const *)b;
+
+  // First sort by type (handlers first, then modules)
+  if (ea->type != eb->type) {
+    return ea->type - eb->type;
+  }
+
+  // Within same type, sort by priority (ascending)
+  if (ea->priority != eb->priority) {
+    return ea->priority - eb->priority;
+  }
+
+  // Finally sort by name
+  return strcmp(ea->name, eb->name);
+}
+
+struct script_enum_context {
+  struct script_entry *entries;
+  size_t count;
+  size_t capacity;
+};
+
+static bool handler_collect_callback(char const *name, int priority, char const *source, void *userdata) {
+  struct script_enum_context *ctx = (struct script_enum_context *)userdata;
+  if (!ctx) {
     return false;
   }
 
-  WCHAR name_w[256] = {0};
-  WCHAR priority_w[32] = {0};
-  WCHAR source_w[MAX_PATH] = {0};
+  if (ctx->count >= ctx->capacity) {
+    size_t const new_capacity = ctx->capacity == 0 ? 16 : ctx->capacity * 2;
+    if (!OV_ARRAY_GROW(&ctx->entries, new_capacity)) {
+      return false;
+    }
+    ctx->capacity = new_capacity;
+  }
 
-  ov_utf8_to_wchar(name, strlen(name), name_w, sizeof(name_w) / sizeof(name_w[0]) - 1, NULL);
-  ov_snprintf_wchar(priority_w, sizeof(priority_w) / sizeof(priority_w[0]), L"%d", L"%d", priority);
-  ov_utf8_to_wchar(source, strlen(source), source_w, sizeof(source_w) / sizeof(source_w[0]) - 1, NULL);
+  struct script_entry *entry = &ctx->entries[ctx->count];
+  entry->type = script_type_handler;
+  entry->priority = priority;
+  strncpy(entry->name, name ? name : "", sizeof(entry->name) - 1);
+  entry->name[sizeof(entry->name) - 1] = '\0';
+  strncpy(entry->source, source ? source : "", sizeof(entry->source) - 1);
+  entry->source[sizeof(entry->source) - 1] = '\0';
+  ctx->count++;
 
-  LVITEMW item = {0};
-  item.mask = LVIF_TEXT;
-  item.iItem = ctx->index;
-  item.iSubItem = 0;
-  item.pszText = name_w;
-  SendMessageW(ctx->list, LVM_INSERTITEMW, 0, (LPARAM)&item);
-
-  LVITEMW subitem = {0};
-  subitem.mask = LVIF_TEXT;
-  subitem.iItem = ctx->index;
-  subitem.iSubItem = 1;
-  subitem.pszText = priority_w;
-  SendMessageW(ctx->list, LVM_SETITEMTEXTW, (WPARAM)ctx->index, (LPARAM)&subitem);
-
-  subitem.iSubItem = 2;
-  subitem.pszText = source_w;
-  SendMessageW(ctx->list, LVM_SETITEMTEXTW, (WPARAM)ctx->index, (LPARAM)&subitem);
-
-  ctx->index++;
   return true;
 }
 
-static void populate_handlers_list(HWND dialog, struct dialog_data *data) {
+static bool module_collect_callback(char const *name, char const *source, void *userdata) {
+  struct script_enum_context *ctx = (struct script_enum_context *)userdata;
+  if (!ctx) {
+    return false;
+  }
+
+  if (ctx->count >= ctx->capacity) {
+    size_t const new_capacity = ctx->capacity == 0 ? 16 : ctx->capacity * 2;
+    if (!OV_ARRAY_GROW(&ctx->entries, new_capacity)) {
+      return false;
+    }
+    ctx->capacity = new_capacity;
+  }
+
+  struct script_entry *entry = &ctx->entries[ctx->count];
+  entry->type = script_type_module;
+  entry->priority = 0; // Script modules have no priority
+  strncpy(entry->name, name ? name : "", sizeof(entry->name) - 1);
+  entry->name[sizeof(entry->name) - 1] = '\0';
+  strncpy(entry->source, source ? source : "", sizeof(entry->source) - 1);
+  entry->source[sizeof(entry->source) - 1] = '\0';
+  ctx->count++;
+
+  return true;
+}
+
+static void populate_scripts_list(HWND dialog, struct dialog_data *data) {
   HWND list = GetDlgItem(dialog, id_list_handlers);
   if (!list) {
     return;
@@ -556,18 +613,85 @@ static void populate_handlers_list(HWND dialog, struct dialog_data *data) {
 
   SendMessageW(list, LVM_DELETEALLITEMS, 0, 0);
 
-  if (!data->enum_handlers) {
-    return;
+  struct ov_error err = {0};
+  struct script_enum_context ctx = {0};
+
+  // Collect handlers
+  if (data->enum_handlers) {
+    if (!data->enum_handlers(data->enum_handlers_context, handler_collect_callback, &ctx, &err)) {
+      OV_ERROR_REPORT(&err, NULL);
+    }
   }
 
-  struct ov_error err = {0};
-  struct handler_enum_context ctx = {
-      .list = list,
-      .index = 0,
-  };
+  // Collect script modules
+  if (data->enum_script_modules) {
+    if (!data->enum_script_modules(data->enum_script_modules_context, module_collect_callback, &ctx, &err)) {
+      OV_ERROR_REPORT(&err, NULL);
+    }
+  }
 
-  if (!data->enum_handlers(data->enum_handlers_context, handler_enum_callback, &ctx, &err)) {
-    OV_ERROR_REPORT(&err, NULL);
+  if (ctx.count == 0) {
+    goto cleanup;
+  }
+
+  // Sort entries
+  qsort(ctx.entries, ctx.count, sizeof(struct script_entry), compare_script_entries);
+
+  // Add sorted entries to list view
+  static wchar_t const ph[] = L"%1$s";
+  for (size_t i = 0; i < ctx.count; i++) {
+    struct script_entry const *entry = &ctx.entries[i];
+
+    WCHAR type_w[64] = {0};
+    WCHAR name_w[256] = {0};
+    WCHAR priority_w[32] = {0};
+    WCHAR source_w[MAX_PATH] = {0};
+
+    // Type column
+    if (entry->type == script_type_handler) {
+      ov_snprintf_wchar(type_w, sizeof(type_w) / sizeof(type_w[0]), ph, ph, pgettext("script_type", "Handler"));
+    } else {
+      ov_snprintf_wchar(type_w, sizeof(type_w) / sizeof(type_w[0]), ph, ph, pgettext("script_type", "Script Module"));
+    }
+
+    // Name column
+    ov_utf8_to_wchar(entry->name, strlen(entry->name), name_w, sizeof(name_w) / sizeof(name_w[0]) - 1, NULL);
+
+    // Priority column (empty for script modules)
+    if (entry->type == script_type_handler) {
+      ov_snprintf_wchar(priority_w, sizeof(priority_w) / sizeof(priority_w[0]), L"%d", L"%d", entry->priority);
+    }
+
+    // Source column
+    ov_utf8_to_wchar(entry->source, strlen(entry->source), source_w, sizeof(source_w) / sizeof(source_w[0]) - 1, NULL);
+
+    LVITEMW item = {0};
+    item.mask = LVIF_TEXT;
+    item.iItem = (int)i;
+    item.iSubItem = 0;
+    item.pszText = type_w;
+    SendMessageW(list, LVM_INSERTITEMW, 0, (LPARAM)&item);
+
+    LVITEMW subitem = {0};
+    subitem.mask = LVIF_TEXT;
+    subitem.iItem = (int)i;
+
+    subitem.iSubItem = 1;
+    subitem.pszText = name_w;
+    SendMessageW(list, LVM_SETITEMTEXTW, (WPARAM)i, (LPARAM)&subitem);
+
+    subitem.iSubItem = 2;
+    subitem.pszText = priority_w;
+    SendMessageW(list, LVM_SETITEMTEXTW, (WPARAM)i, (LPARAM)&subitem);
+
+    subitem.iSubItem = 3;
+    subitem.pszText = source_w;
+    SendMessageW(list, LVM_SETITEMTEXTW, (WPARAM)i, (LPARAM)&subitem);
+  }
+
+cleanup:
+  if (ctx.entries) {
+    OV_ARRAY_DESTROY(&ctx.entries);
   }
 }
 
@@ -580,20 +704,20 @@ static void switch_tab(HWND dialog, struct dialog_data *data, int new_tab) {
   if (data->current_tab == tab_index_settings) {
     show_tab_controls(
         dialog, settings_tab_controls, sizeof(settings_tab_controls) / sizeof(settings_tab_controls[0]), SW_HIDE);
-  } else if (data->current_tab == tab_index_handlers) {
+  } else if (data->current_tab == tab_index_scripts) {
     show_tab_controls(
-        dialog, handlers_tab_controls, sizeof(handlers_tab_controls) / sizeof(handlers_tab_controls[0]), SW_HIDE);
+        dialog, scripts_tab_controls, sizeof(scripts_tab_controls) / sizeof(scripts_tab_controls[0]), SW_HIDE);
   }
 
   // Show new tab controls
   if (new_tab == tab_index_settings) {
     show_tab_controls(
         dialog, settings_tab_controls, sizeof(settings_tab_controls) / sizeof(settings_tab_controls[0]), SW_SHOW);
-  } else if (new_tab == tab_index_handlers) {
+  } else if (new_tab == tab_index_scripts) {
     show_tab_controls(
-        dialog, handlers_tab_controls, sizeof(handlers_tab_controls) / sizeof(handlers_tab_controls[0]), SW_SHOW);
-    // Populate the handlers list when switching to this tab
-    populate_handlers_list(dialog, data);
+        dialog, scripts_tab_controls, sizeof(scripts_tab_controls) / sizeof(scripts_tab_controls[0]), SW_SHOW);
+    // Populate the scripts list when switching to this tab
+    populate_scripts_list(dialog, data);
   }
 
   data->current_tab = new_tab;
@@ -1080,13 +1204,8 @@ static HANDLE create_activation_context_for_comctl32(void) {
   return CreateActCtxW(&actctx);
 }
 
-bool gcmz_config_dialog_show(struct gcmz_config *config,
-                             gcmz_config_dialog_enum_handlers_fn enum_handlers,
-                             void *enum_handlers_context,
-                             void *parent_window,
-                             bool const external_api_running,
-                             struct ov_error *const err) {
-  if (!config) {
+bool gcmz_config_dialog_show(struct gcmz_config_dialog_options const *const options, struct ov_error *const err) {
+  if (!options || !options->config) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
   }
@@ -1102,10 +1221,12 @@ bool gcmz_config_dialog_show(struct gcmz_config *config,
   bool activated = false;
 
   {
-    data.config = config;
-    data.enum_handlers = enum_handlers;
-    data.enum_handlers_context = enum_handlers_context;
-    data.external_api_running = external_api_running;
+    data.config = options->config;
+    data.enum_handlers = options->enum_handlers;
+    data.enum_handlers_context = options->enum_handlers_context;
+    data.enum_script_modules = options->enum_script_modules;
+    data.enum_script_modules_context = options->enum_script_modules_context;
+    data.external_api_running = options->external_api_running;
 
     if (!ovl_os_get_hinstance_from_fnptr((void *)gcmz_config_dialog_show, &hinstance, err)) {
       OV_ERROR_ADD_TRACE(err);
@@ -1123,8 +1244,8 @@ bool gcmz_config_dialog_show(struct gcmz_config *config,
     }
     activated = true;
 
-    INT_PTR dialog_result =
-        DialogBoxParamW((HINSTANCE)hinstance, L"GCMZCONFIGDIALOG", (HWND)parent_window, dialog_proc, (LPARAM)&data);
+    INT_PTR dialog_result = DialogBoxParamW(
+        (HINSTANCE)hinstance, L"GCMZCONFIGDIALOG", (HWND)options->parent_window, dialog_proc, (LPARAM)&data);
     if (dialog_result == -1) {
       OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
       goto cleanup;

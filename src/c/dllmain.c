@@ -55,6 +55,56 @@ static struct gcmz_lua_context *get_lua(struct ov_error *const err) {
   return g_lua;
 }
 
+/**
+ * @brief Get UTF-8 module path from function address
+ * @param fnptr Function address to get module path for
+ * @param err [out] Error information on failure
+ * @return UTF-8 module path on success, or NULL on failure (caller owns, free with OV_ARRAY_DESTROY)
+ */
+static char *get_caller_module_path(void *const fnptr, struct ov_error *const err) {
+  if (!fnptr) {
+    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "failed to get return address");
+    return NULL;
+  }
+
+  void *hinst = NULL;
+  wchar_t *module_path = NULL;
+  char *module_path_utf8 = NULL;
+  char *result = NULL;
+
+  {
+    if (!ovl_os_get_hinstance_from_fnptr(fnptr, &hinst, err)) {
+      OV_ERROR_PUSH(err, ov_error_type_generic, ov_error_generic_fail, "failed to get caller module instance");
+      goto cleanup;
+    }
+    if (!ovl_path_get_module_name(&module_path, hinst, err)) {
+      OV_ERROR_PUSH(err, ov_error_type_generic, ov_error_generic_fail, "failed to get caller module path");
+      goto cleanup;
+    }
+    size_t const len = ov_wchar_to_utf8_len(module_path, OV_ARRAY_LENGTH(module_path));
+    if (!OV_ARRAY_GROW(&module_path_utf8, len + 1)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+    if (!ov_wchar_to_utf8(module_path, OV_ARRAY_LENGTH(module_path), module_path_utf8, len + 1, NULL)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+      goto cleanup;
+    }
+  }
+
+  result = module_path_utf8;
+  module_path_utf8 = NULL;
+
+cleanup:
+  if (module_path_utf8) {
+    OV_ARRAY_DESTROY(&module_path_utf8);
+  }
+  if (module_path) {
+    OV_ARRAY_DESTROY(&module_path);
+  }
+  return result;
+}
+
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger);
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) { gcmz_logf_set_handle(logger); }
 
@@ -171,33 +221,13 @@ bool __declspec(dllexport) AddHandlerScript(char const *const script, size_t con
   }
 
   struct ov_error err = {0};
-  void *hinst = NULL;
-  wchar_t *module_path = NULL;
   char *module_path_utf8 = NULL;
   bool result = false;
 
   {
-    // Get caller's module path using return address
-    void *const return_addr = __builtin_return_address(0);
-    if (!return_addr) {
-      OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get return address");
-      goto cleanup;
-    }
-    if (!ovl_os_get_hinstance_from_fnptr(return_addr, &hinst, &err)) {
-      OV_ERROR_PUSH(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get caller module instance");
-      goto cleanup;
-    }
-    if (!ovl_path_get_module_name(&module_path, hinst, &err)) {
-      OV_ERROR_PUSH(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get caller module path");
-      goto cleanup;
-    }
-    size_t const len = ov_wchar_to_utf8_len(module_path, OV_ARRAY_LENGTH(module_path));
-    if (!OV_ARRAY_GROW(&module_path_utf8, len + 1)) {
-      OV_ERROR_SET_GENERIC(&err, ov_error_generic_out_of_memory);
-      goto cleanup;
-    }
-    if (!ov_wchar_to_utf8(module_path, OV_ARRAY_LENGTH(module_path), module_path_utf8, len + 1, NULL)) {
-      OV_ERROR_SET_GENERIC(&err, ov_error_generic_fail);
+    module_path_utf8 = get_caller_module_path(__builtin_return_address(0), &err);
+    if (!module_path_utf8) {
+      OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
   }
@@ -225,9 +255,6 @@ cleanup:
   }
   if (module_path_utf8) {
     OV_ARRAY_DESTROY(&module_path_utf8);
-  }
-  if (module_path) {
-    OV_ARRAY_DESTROY(&module_path);
   }
   return result;
 }
@@ -270,15 +297,23 @@ bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_tab
   }
 
   struct ov_error err = {0};
+  char *module_path_utf8 = NULL;
   bool result = false;
 
+  {
+    module_path_utf8 = get_caller_module_path(__builtin_return_address(0), &err);
+    if (!module_path_utf8) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+  }
   {
     struct gcmz_lua_context *const lua = get_lua(&err);
     if (!lua) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
-    if (!gcmz_lua_register_script_module(lua, table, module_name, &err)) {
+    if (!gcmz_lua_register_script_module(lua, table, module_name, module_path_utf8, &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
@@ -288,8 +323,15 @@ bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_tab
 
 cleanup:
   if (!result) {
-    gcmz_logf_warn(&err, "%1$hs", gettext("failed to register script module %1$hs"), module_name);
+    gcmz_logf_warn(&err,
+                   "%1$hs",
+                   gettext("failed to register script module %1$hs from %2$hs"),
+                   module_name,
+                   module_path_utf8 ? module_path_utf8 : "<unknown>");
     OV_ERROR_DESTROY(&err);
+  }
+  if (module_path_utf8) {
+    OV_ARRAY_DESTROY(&module_path_utf8);
   }
   return result;
 }

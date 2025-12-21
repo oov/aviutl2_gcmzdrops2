@@ -860,6 +860,14 @@ static bool enum_handlers_callback(void *callback_context,
   return gcmz_lua_enum_handlers(lua_ctx, fn, userdata, err);
 }
 
+static bool enum_script_modules_callback(void *callback_context,
+                                         gcmz_config_dialog_script_module_enum_fn fn,
+                                         void *userdata,
+                                         struct ov_error *err) {
+  struct gcmz_lua_context *lua_ctx = (struct gcmz_lua_context *)callback_context;
+  return gcmz_lua_enum_script_modules(lua_ctx, fn, userdata, err);
+}
+
 void gcmzdrops_show_config_dialog(struct gcmzdrops *const ctx, void *const hwnd, void *const dll_hinst) {
   (void)dll_hinst;
   if (!ctx) {
@@ -871,7 +879,17 @@ void gcmzdrops_show_config_dialog(struct gcmzdrops *const ctx, void *const hwnd,
   bool success = false;
 
   {
-    if (!gcmz_config_dialog_show(ctx->config, enum_handlers_callback, ctx->lua_ctx, (HWND)hwnd, running, &err)) {
+    if (!gcmz_config_dialog_show(
+            &(struct gcmz_config_dialog_options){
+                .config = ctx->config,
+                .enum_handlers = enum_handlers_callback,
+                .enum_handlers_context = ctx->lua_ctx,
+                .enum_script_modules = enum_script_modules_callback,
+                .enum_script_modules_context = ctx->lua_ctx,
+                .parent_window = (HWND)hwnd,
+                .external_api_running = running,
+            },
+            &err)) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }

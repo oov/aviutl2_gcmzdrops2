@@ -239,15 +239,44 @@ NODISCARD bool gcmz_lua_enum_handlers(struct gcmz_lua_context const *const ctx,
 char const *gcmz_lua_get_script_modules_key(void);
 
 /**
+ * @brief Callback function type for enumerating script modules
+ *
+ * @param name Module name (UTF-8)
+ * @param source Source path where the module was registered from (UTF-8)
+ * @param userdata User-defined context
+ * @return true to continue enumeration, false to stop
+ */
+typedef bool (*gcmz_lua_script_module_enum_callback)(char const *name, char const *source, void *userdata);
+
+/**
+ * @brief Enumerate all registered script modules
+ *
+ * Calls the callback function for each registered script module.
+ * The callback receives the module name and source path.
+ *
+ * @param ctx Lua context instance
+ * @param callback Callback function to call for each module
+ * @param userdata User-defined context passed to callback
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+NODISCARD bool gcmz_lua_enum_script_modules(struct gcmz_lua_context const *const ctx,
+                                            gcmz_lua_script_module_enum_callback callback,
+                                            void *userdata,
+                                            struct ov_error *const err);
+
+/**
  * @brief Register a script module with the Lua context
  *
  * @param ctx Lua context instance
  * @param table Script module table from external DLL
  * @param module_name Module name (UTF-8)
+ * @param source Source path indicating where the module came from (UTF-8)
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
 NODISCARD bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
                                                struct aviutl2_script_module_table *const table,
                                                char const *const module_name,
+                                               char const *const source,
                                                struct ov_error *const err);

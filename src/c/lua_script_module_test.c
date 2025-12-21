@@ -426,9 +426,12 @@ static void register_module_lookup(lua_State *L) {
   }
 
   // Register helper function
+  // Note: The registry now stores { table = module_table, source = source_string }
+  // so we need to access the .table field to get the actual module
   luaL_dostring(L,
                 "function get_test_module(name)\n"
-                "  return _script_modules and _script_modules[name]\n"
+                "  local wrapper = _script_modules and _script_modules[name]\n"
+                "  return wrapper and wrapper.table\n"
                 "end\n");
 }
 
@@ -445,7 +448,7 @@ static void test_register_module(void) {
   }
 
   // Register the test module
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -468,13 +471,13 @@ static void test_register_duplicate_module(void) {
   }
 
   // Register the test module
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
 
   // Try to register again - should fail
-  bool result = gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err);
+  bool result = gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err);
   TEST_CHECK(!result);
   OV_ERROR_DESTROY(&err);
 
@@ -490,13 +493,13 @@ static void test_register_multiple_modules(void) {
   }
 
   // Register first module
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "mod1", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "mod1", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
 
   // Register second module
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module2, "mod2", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module2, "mod2", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -520,19 +523,19 @@ static void test_invalid_registration(void) {
   }
 
   // NULL context
-  TEST_CHECK(!gcmz_lua_register_script_module(NULL, &g_test_module, "test", &err));
+  TEST_CHECK(!gcmz_lua_register_script_module(NULL, &g_test_module, "test", NULL, &err));
   OV_ERROR_DESTROY(&err);
 
   // NULL table
-  TEST_CHECK(!gcmz_lua_register_script_module(ctx, NULL, "test", &err));
+  TEST_CHECK(!gcmz_lua_register_script_module(ctx, NULL, "test", NULL, &err));
   OV_ERROR_DESTROY(&err);
 
   // NULL module name
-  TEST_CHECK(!gcmz_lua_register_script_module(ctx, &g_test_module, NULL, &err));
+  TEST_CHECK(!gcmz_lua_register_script_module(ctx, &g_test_module, NULL, NULL, &err));
   OV_ERROR_DESTROY(&err);
 
   // Empty module name
-  TEST_CHECK(!gcmz_lua_register_script_module(ctx, &g_test_module, "", &err));
+  TEST_CHECK(!gcmz_lua_register_script_module(ctx, &g_test_module, "", NULL, &err));
   OV_ERROR_DESTROY(&err);
 
   gcmz_lua_destroy(&ctx);
@@ -545,7 +548,7 @@ static void test_call_function_no_params(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -565,7 +568,7 @@ static void test_call_function_with_integers(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -590,7 +593,7 @@ static void test_call_function_with_doubles(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -618,7 +621,7 @@ static void test_call_function_with_string(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -643,7 +646,7 @@ static void test_call_function_with_boolean(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -671,7 +674,7 @@ static void test_call_function_with_table(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -700,7 +703,7 @@ static void test_call_function_with_array(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -728,7 +731,7 @@ static void test_call_function_with_array_doubles(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -755,7 +758,7 @@ static void test_call_function_with_array_strings(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -783,7 +786,7 @@ static void test_multi_return(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -810,7 +813,7 @@ static void test_return_table_int(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -836,7 +839,7 @@ static void test_return_table_double(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -862,7 +865,7 @@ static void test_return_table_string(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -887,7 +890,7 @@ static void test_return_array_int(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -916,7 +919,7 @@ static void test_return_array_double(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -943,7 +946,7 @@ static void test_return_array_string(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -970,7 +973,7 @@ static void test_error_handling(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -996,7 +999,7 @@ static void test_module_protection(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1021,7 +1024,7 @@ static void test_edge_cases(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1052,7 +1055,7 @@ static void test_long_function_name(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1077,7 +1080,7 @@ static void test_complex_operation(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1144,7 +1147,7 @@ static void test_utf8_string_handling(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1172,7 +1175,7 @@ static void test_empty_string(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1195,7 +1198,7 @@ static void test_nil_parameters(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1217,7 +1220,7 @@ static void test_mixed_type_parameters(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1242,7 +1245,7 @@ static void test_large_numbers(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1271,7 +1274,7 @@ static void test_empty_array(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }
@@ -1293,7 +1296,7 @@ static void test_empty_table(void) {
   if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
     return;
   }
-  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
     gcmz_lua_destroy(&ctx);
     return;
   }

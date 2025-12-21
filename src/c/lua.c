@@ -1199,6 +1199,7 @@ static int script_module_newindex(lua_State *const L) { return luaL_error(L, "ca
 bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
                                      struct aviutl2_script_module_table *const table,
                                      char const *const module_name,
+                                     char const *const source,
                                      struct ov_error *const err) {
   if (!ctx || !ctx->L || !table || !module_name || !*module_name) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
@@ -1236,9 +1237,13 @@ bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
     lua_pop(L, 1); // Pop nil
     // Stack: [modules_table]
 
+    // Create a wrapper table that holds module_table and source
+    lua_newtable(L);
+    // Stack: [modules_table, wrapper_table]
+
     // Create the module table (the actual table that holds functions)
     lua_newtable(L);
-    // Stack: [modules_table, module_table]
+    // Stack: [modules_table, wrapper_table, module_table]
 
     // Add functions to the module table
     for (struct aviutl2_script_module_function const *f = table->functions; f && f->name; ++f) {
@@ -1265,7 +1270,7 @@ bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
       lua_pushcclosure(L, script_module_function_wrapper, 1);
       lua_setfield(L, -2, func_name_utf8);
     }
-    // Stack: [modules_table, module_table]
+    // Stack: [modules_table, wrapper_table, module_table]
 
     // Create metatable for protection
     luaL_getmetatable(L, script_module_mt);
@@ -1279,9 +1284,18 @@ bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
       lua_setfield(L, -2, "__metatable");
     }
     lua_setmetatable(L, -2);
-    // Stack: [modules_table, module_table (with metatable)]
+    // Stack: [modules_table, wrapper_table, module_table (with metatable)]
 
-    // Store module in the registry table
+    // Store module_table in wrapper_table.table
+    lua_setfield(L, -2, "table");
+    // Stack: [modules_table, wrapper_table]
+
+    // Store source in wrapper_table.source
+    lua_pushstring(L, source ? source : "");
+    lua_setfield(L, -2, "source");
+    // Stack: [modules_table, wrapper_table]
+
+    // Store wrapper in the registry table
     lua_setfield(L, -2, module_name);
     // Stack: [modules_table]
     lua_pop(L, 1);
@@ -1294,6 +1308,67 @@ cleanup:
   if (func_name_heap) {
     OV_ARRAY_DESTROY(&func_name_heap);
   }
+  lua_settop(L, base_top);
+  return result;
+}
+
+NODISCARD bool gcmz_lua_enum_script_modules(struct gcmz_lua_context const *const ctx,
+                                            gcmz_lua_script_module_enum_callback callback,
+                                            void *userdata,
+                                            struct ov_error *const err) {
+  if (!ctx || !ctx->L || !callback) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  lua_State *L = ctx->L;
+  int const base_top = lua_gettop(L);
+  bool result = false;
+
+  {
+    // Get the script modules registry table
+    lua_getfield(L, LUA_REGISTRYINDEX, script_modules_key);
+    if (!lua_istable(L, -1)) {
+      // No modules registered, this is not an error
+      lua_pop(L, 1);
+      result = true;
+      goto cleanup;
+    }
+    // Stack: [modules_table]
+
+    // Iterate over all entries in the modules table
+    lua_pushnil(L);
+    // Stack: [modules_table, nil]
+    while (lua_next(L, -2) != 0) {
+      // Stack: [modules_table, key, wrapper_table]
+      char const *name = lua_isstring(L, -2) ? lua_tostring(L, -2) : "";
+
+      // Get source from wrapper_table
+      char const *source = "";
+      if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "source");
+        if (lua_isstring(L, -1)) {
+          source = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1); // Pop source
+      }
+
+      if (!callback(name, source, userdata)) {
+        lua_pop(L, 2); // Pop value and key
+        break;
+      }
+
+      lua_pop(L, 1); // Pop value, keep key for next iteration
+      // Stack: [modules_table, key]
+    }
+    // Stack: [modules_table]
+    lua_pop(L, 1);
+    // Stack: []
+  }
+
+  result = true;
+
+cleanup:
   lua_settop(L, base_top);
   return result;
 }
