@@ -83,6 +83,7 @@ struct gcmz_lua_api_options {
   gcmz_lua_api_debug_print_fn debug_print;
   gcmz_lua_api_script_dir_provider_fn script_dir_provider;
   gcmz_lua_api_get_media_info_fn get_media_info;
+  char const *script_modules_key;
   void *userdata;
   uint32_t aviutl2_ver;
   uint32_t gcmz_ver;

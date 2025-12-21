@@ -31,6 +31,7 @@
 - [gcmz.save\_file](#gcmzsave_file)
 - [gcmz.convert\_encoding](#gcmzconvert_encoding)
 - [gcmz.decode\_exo\_text](#gcmzdecode_exo_text)
+- [gcmz.get\_script\_module](#gcmzget_script_module)
 
 ### ini モジュール
 
@@ -897,6 +898,45 @@ local empty = gcmz.decode_exo_text("")
 print(empty)  -- 出力: （空文字列）
 ```
 
+---
+
+## gcmz.get_script_module
+
+登録されたスクリプトモジュールを名前で取得します。
+
+スクリプトモジュールは AviUtl ExEdit2 のスクリプトモジュールと互換性があり、AviUtl ExEdit2 における `obj.module()` と同じ方法でモジュールにアクセスできます。
+
+### 構文
+
+```lua
+local module = gcmz.get_script_module(module_name)
+```
+
+### パラメーター
+
+| パラメーター | 型 | 説明 |
+|-----------|------|-------------|
+| `module_name` | string | 取得するモジュールの名前 |
+
+### 戻り値
+
+モジュールが見つかった場合はモジュールオブジェクトを返します。見つからなかった場合は `nil` を返します。
+
+返されたモジュールオブジェクトは、そのモジュールが提供する関数を直接呼び出すことができます。
+
+### 例
+
+```lua
+-- スクリプトモジュールを取得
+local mymodule = gcmz.get_script_module("MyModule")
+if mymodule then
+  -- モジュールの関数を呼び出す
+  local result = mymodule.some_function(1, 2, "hello")
+  print(result)
+else
+  debug_print("MyModule is not available")
+end
+```
 
 ---
 

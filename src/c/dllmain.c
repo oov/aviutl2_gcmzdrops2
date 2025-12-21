@@ -19,6 +19,7 @@
 #include <ovl/path.h>
 
 #include <aviutl2_logger2.h>
+#include <aviutl2_module2.h>
 #include <aviutl2_plugin2.h>
 
 #include "error.h"
@@ -255,6 +256,39 @@ bool __declspec(dllexport) AddHandlerScriptFile(wchar_t const *const filepath) {
 cleanup:
   if (!result) {
     gcmz_logf_warn(&err, "%1$ls", gettext("failed to add handler script file %1$ls"), filepath);
+    OV_ERROR_DESTROY(&err);
+  }
+  return result;
+}
+
+bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table,
+                                                char const *const module_name);
+bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table,
+                                                char const *const module_name) {
+  if (!table || !module_name) {
+    return false;
+  }
+
+  struct ov_error err = {0};
+  bool result = false;
+
+  {
+    struct gcmz_lua_context *const lua = get_lua(&err);
+    if (!lua) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+    if (!gcmz_lua_register_script_module(lua, table, module_name, &err)) {
+      OV_ERROR_ADD_TRACE(&err);
+      goto cleanup;
+    }
+  }
+
+  result = true;
+
+cleanup:
+  if (!result) {
+    gcmz_logf_warn(&err, "%1$hs", gettext("failed to register script module %1$hs"), module_name);
     OV_ERROR_DESTROY(&err);
   }
   return result;

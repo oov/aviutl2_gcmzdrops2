@@ -1,6 +1,7 @@
 #include "luautil.h"
 
 #include <lauxlib.h>
+
 #include <ovarray.h>
 #include <ovprintf.h>
 #include <ovutf.h>
@@ -14,36 +15,7 @@
 #include <string.h>
 #include <time.h>
 
-static NODISCARD bool error_to_string(struct ov_error const *const e, char **const dest, struct ov_error *const err) {
-  if (!e || !dest) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
-    return false;
-  }
-
-  *dest = NULL;
-  char *result = NULL;
-  bool result_success = false;
-
-  {
-    // Use the built-in ov_error_to_string function from ovbase
-    if (!ov_error_to_string(e, &result, true, err)) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
-  }
-
-  *dest = result;
-  result = NULL;
-  result_success = true;
-
-cleanup:
-  if (result) {
-    OV_ARRAY_DESTROY(&result);
-  }
-  return result_success;
-}
-
-int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *const funcname) {
+int gcmz_luafn_err_(struct lua_State *const L, struct ov_error *const e, char const *const funcname) {
   if (!L || !funcname) {
     if (e) {
       OV_ERROR_DESTROY(e);
@@ -68,7 +40,7 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
   lua_pushstring(L, "():\r\n");
 
   // Convert error to string
-  if (!error_to_string(e, &error_msg, NULL)) {
+  if (!ov_error_to_string(e, &error_msg, true, NULL)) {
     lua_pushstring(L, "failed to build error message");
   } else {
     lua_pushstring(L, error_msg);
@@ -83,7 +55,7 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
   return lua_error(L);
 }
 
-int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char const *const funcname) {
+int gcmz_luafn_result_err_(struct lua_State *const L, struct ov_error *const e, char const *const funcname) {
   if (!L || !funcname) {
     if (e) {
       OV_ERROR_DESTROY(e);
@@ -108,7 +80,7 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
   lua_pushstring(L, "(): ");
 
   // Convert error to string
-  if (!error_to_string(e, &error_msg, NULL)) {
+  if (!ov_error_to_string(e, &error_msg, true, NULL)) {
     lua_pushstring(L, "failed to build error message");
   } else {
     lua_pushstring(L, error_msg);
@@ -127,7 +99,7 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
   return 2;
 }
 
-bool gcmz_lua_pcall(lua_State *const L, int nargs, int nresults, struct ov_error *const err) {
+bool gcmz_lua_pcall(struct lua_State *const L, int nargs, int nresults, struct ov_error *const err) {
   if (!L) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
@@ -223,7 +195,7 @@ struct lua_reader_state {
   bool first_read;
 };
 
-static char const *lua_file_reader(lua_State *const L, void *const ud, size_t *const size) {
+static char const *lua_file_reader(struct lua_State *const L, void *const ud, size_t *const size) {
   (void)L;
   struct lua_reader_state *const state = (struct lua_reader_state *)ud;
   struct ov_error err = {0};
@@ -249,7 +221,7 @@ static char const *lua_file_reader(lua_State *const L, void *const ud, size_t *c
   return buf;
 }
 
-static bool lua_loadfile_w(lua_State *const L, NATIVE_CHAR const *const filepath, struct ov_error *const err) {
+static bool lua_loadfile_w(struct lua_State *const L, NATIVE_CHAR const *const filepath, struct ov_error *const err) {
   if (!L || !filepath || filepath[0] == L'\0') {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
@@ -323,7 +295,7 @@ static bool file_exists_w(wchar_t const *const path) {
  * Loads a Lua chunk from file without executing it.
  * Returns the compiled chunk as a function, or nil plus error message on failure.
  */
-static int lua_loadfile_utf8(lua_State *L) {
+static int lua_loadfile_utf8(struct lua_State *L) {
   char const *const filename = luaL_optstring(L, 1, NULL);
   // mode parameter (arg 2) is ignored - we always load as text
   // env parameter (arg 3) would require setfenv which is complex
@@ -366,7 +338,7 @@ cleanup:
  *
  * Opens the named file and executes its contents as a Lua chunk.
  */
-static int lua_dofile_utf8(lua_State *L) {
+static int lua_dofile_utf8(struct lua_State *L) {
   char const *const filename = luaL_optstring(L, 1, NULL);
 
   wchar_t *filepath_w = NULL;
@@ -440,7 +412,7 @@ static bool modname_to_path(char const *modname, size_t len, char **dest, struct
  * @param field "path" or "cpath"
  * @return Path string or NULL if not found (pushes error message on stack if NULL)
  */
-static char const *get_package_field(lua_State *L, char const *field) {
+static char const *get_package_field(struct lua_State *L, char const *field) {
   lua_getglobal(L, "package");
   lua_getfield(L, -1, field);
   char const *const path = lua_tostring(L, -1);
@@ -461,7 +433,7 @@ static char const *get_package_field(lua_State *L, char const *field) {
  * @param found_path [in/out] Buffer to store found path (reusable)
  * @return true if file found, false otherwise
  */
-static bool search_path(lua_State *L, char const *modname, char const *path_pattern, wchar_t **found_path) {
+static bool search_path(struct lua_State *L, char const *modname, char const *path_pattern, wchar_t **found_path) {
   if (!path_pattern || !modname || !found_path) {
     return false;
   }
@@ -525,7 +497,7 @@ static bool search_path(lua_State *L, char const *modname, char const *path_patt
  *
  * Searches for a Lua module in package.path and loads it.
  */
-static int lua_searcher_utf8(lua_State *L) {
+static int lua_searcher_utf8(struct lua_State *L) {
   char const *const modname = luaL_checkstring(L, 1);
 
   wchar_t *found_path = NULL;
@@ -619,7 +591,7 @@ static char const c_module_metatable_key[] = "gcmz_c_hmodule_mt";
  *
  * Called when the userdata is garbage collected, frees the library.
  */
-static int lua_c_handle_gc(lua_State *L) {
+static int lua_c_handle_gc(struct lua_State *L) {
   HMODULE *handle_ptr = (HMODULE *)lua_touserdata(L, 1);
   if (handle_ptr && *handle_ptr) {
     FreeLibrary(*handle_ptr);
@@ -637,7 +609,7 @@ static int lua_c_handle_gc(lua_State *L) {
  * @param hmodule Module handle to register
  * @param modname Module name for tracking
  */
-static void register_c_module_handle(lua_State *L, HMODULE hmodule, char const *modname) {
+static void register_c_module_handle(struct lua_State *L, HMODULE hmodule, char const *modname) {
   if (!L || !hmodule) {
     return;
   }
@@ -676,7 +648,7 @@ static void register_c_module_handle(lua_State *L, HMODULE hmodule, char const *
  * @return luaopen function on success, NULL on failure (pushes error message on stack)
  */
 static lua_CFunction load_c_library(
-    lua_State *L, char const *modname, wchar_t const *found_path, bool try_short_name, HMODULE *hmodule_out) {
+    struct lua_State *L, char const *modname, wchar_t const *found_path, bool try_short_name, HMODULE *hmodule_out) {
   char *funcname = NULL;
 
   HMODULE hmodule = LoadLibraryW(found_path);
@@ -720,7 +692,7 @@ static lua_CFunction load_c_library(
  *
  * Searches for a C library in package.cpath and loads it using LoadLibraryW.
  */
-static int lua_c_searcher_utf8(lua_State *L) {
+static int lua_c_searcher_utf8(struct lua_State *L) {
   char const *const modname = luaL_checkstring(L, 1);
 
   wchar_t *found_path = NULL;
@@ -789,7 +761,7 @@ cleanup:
  * Searches for a C submodule in an already loaded C library.
  * For example, require("a.b.c") will look for "a" library and call luaopen_a_b_c.
  */
-static int lua_c_root_searcher_utf8(lua_State *L) {
+static int lua_c_root_searcher_utf8(struct lua_State *L) {
   char const *const modname = luaL_checkstring(L, 1);
 
   char const *dot = strchr(modname, '.');
@@ -905,7 +877,7 @@ static inline bool io_file_is_open(struct io_file const *f) {
  * @brief Get file handle from userdata, push nil + error message if invalid
  * @return File handle if valid and open, NULL otherwise (nil + error pushed)
  */
-static struct io_file *get_file_handle_soft(lua_State *L, int index) {
+static struct io_file *get_file_handle_soft(struct lua_State *L, int index) {
   struct io_file *f = (struct io_file *)luaL_checkudata(L, index, io_file_handle_key);
   if (!io_file_is_open(f)) {
     lua_pushnil(L);
@@ -918,7 +890,7 @@ static struct io_file *get_file_handle_soft(lua_State *L, int index) {
 /**
  * @brief Check if file handle is valid and open, throw error if not
  */
-static struct io_file *check_file_handle(lua_State *L, int index, char const *func_name) {
+static struct io_file *check_file_handle(struct lua_State *L, int index, char const *func_name) {
   struct io_file *f = (struct io_file *)luaL_checkudata(L, index, io_file_handle_key);
   if (!io_file_is_open(f)) {
     luaL_error(L, "attempt to use a closed file in %s", func_name);
@@ -930,14 +902,14 @@ static struct io_file *check_file_handle(lua_State *L, int index, char const *fu
 /**
  * @brief Get file handle from userdata without validity check
  */
-static struct io_file *get_file_handle(lua_State *L, int index) {
+static struct io_file *get_file_handle(struct lua_State *L, int index) {
   return (struct io_file *)luaL_testudata(L, index, io_file_handle_key);
 }
 
 /**
  * @brief file:close() method
  */
-static int io_file_close(lua_State *L) {
+static int io_file_close(struct lua_State *L) {
   struct io_file *f = (struct io_file *)luaL_checkudata(L, 1, io_file_handle_key);
 
   if (!f) {
@@ -975,7 +947,7 @@ static int io_file_close(lua_State *L) {
 /**
  * @brief __gc metamethod for file handle
  */
-static int io_file_gc(lua_State *L) {
+static int io_file_gc(struct lua_State *L) {
   struct io_file *f = get_file_handle(L, 1);
 
   if (!io_file_is_open(f)) {
@@ -998,7 +970,7 @@ static int io_file_gc(lua_State *L) {
 /**
  * @brief __tostring metamethod for file handle
  */
-static int io_file_tostring(lua_State *L) {
+static int io_file_tostring(struct lua_State *L) {
   struct io_file *f = get_file_handle(L, 1);
 
   if (!f) {
@@ -1021,7 +993,7 @@ static int io_file_tostring(lua_State *L) {
 /**
  * @brief file:flush() method
  */
-static int io_file_flush(lua_State *L) {
+static int io_file_flush(struct lua_State *L) {
   struct io_file *f = check_file_handle(L, 1, "flush");
   if (!f) {
     return 2;
@@ -1086,7 +1058,7 @@ static bool read_line(struct io_file *f, luaL_Buffer *B, bool keep_newline) {
 /**
  * @brief Read entire file content
  */
-static int read_all(lua_State *L, struct io_file *f) {
+static int read_all(struct lua_State *L, struct io_file *f) {
   luaL_Buffer B;
   luaL_buffinit(L, &B);
 
@@ -1103,7 +1075,7 @@ static int read_all(lua_State *L, struct io_file *f) {
 /**
  * @brief Read specified number of bytes
  */
-static int read_bytes(lua_State *L, struct io_file *f, size_t n) {
+static int read_bytes(struct lua_State *L, struct io_file *f, size_t n) {
   if (n == 0) {
     // Special case: check EOF
     DWORD file_pos = SetFilePointer(f->handle, 0, NULL, FILE_CURRENT);
@@ -1145,7 +1117,7 @@ static int read_bytes(lua_State *L, struct io_file *f, size_t n) {
 /**
  * @brief Read a number from file
  */
-static int read_number(lua_State *L, struct io_file *f) {
+static int read_number(struct lua_State *L, struct io_file *f) {
   luaL_Buffer B;
   luaL_buffinit(L, &B);
 
@@ -1214,7 +1186,7 @@ static int read_number(lua_State *L, struct io_file *f) {
 /**
  * @brief file:read(...) method
  */
-static int io_file_read(lua_State *L) {
+static int io_file_read(struct lua_State *L) {
   struct io_file *f = get_file_handle_soft(L, 1);
   if (!f) {
     return 2;
@@ -1311,7 +1283,7 @@ static bool write_data(struct io_file *f, void const *data, size_t len) {
 /**
  * @brief file:write(...) method
  */
-static int io_file_write(lua_State *L) {
+static int io_file_write(struct lua_State *L) {
   struct io_file *f = get_file_handle_soft(L, 1);
   if (!f) {
     return 2;
@@ -1386,7 +1358,7 @@ cleanup:
 /**
  * @brief file:seek([whence [, offset]]) method
  */
-static int io_file_seek(lua_State *L) {
+static int io_file_seek(struct lua_State *L) {
   struct io_file *f = check_file_handle(L, 1, "seek");
   if (!f) {
     return 2;
@@ -1417,7 +1389,7 @@ static int io_file_seek(lua_State *L) {
  *
  * This is a stub implementation since we use Win32 file handles directly.
  */
-static int io_file_setvbuf(lua_State *L) {
+static int io_file_setvbuf(struct lua_State *L) {
   (void)check_file_handle(L, 1, "setvbuf");
   // Always returns success - buffering is handled by Windows
   lua_pushboolean(L, 1);
@@ -1427,7 +1399,7 @@ static int io_file_setvbuf(lua_State *L) {
 /**
  * @brief file:lines() iterator function
  */
-static int io_file_lines_iterator(lua_State *L) {
+static int io_file_lines_iterator(struct lua_State *L) {
   struct io_file *f = (struct io_file *)lua_touserdata(L, lua_upvalueindex(1));
   if (!io_file_is_open(f)) {
     return 0;
@@ -1446,7 +1418,7 @@ static int io_file_lines_iterator(lua_State *L) {
 /**
  * @brief file:lines() method
  */
-static int io_file_lines(lua_State *L) {
+static int io_file_lines(struct lua_State *L) {
   check_file_handle(L, 1, "lines");
   lua_pushvalue(L, 1);
   lua_pushcclosure(L, io_file_lines_iterator, 1);
@@ -1456,7 +1428,7 @@ static int io_file_lines(lua_State *L) {
 /**
  * @brief Create a new file handle userdata
  */
-static struct io_file *create_file_handle(lua_State *L, HANDLE h, bool is_read, bool is_write, bool is_binary) {
+static struct io_file *create_file_handle(struct lua_State *L, HANDLE h, bool is_read, bool is_write, bool is_binary) {
   struct io_file *f = (struct io_file *)lua_newuserdata(L, sizeof(struct io_file));
   f->type = io_file_type_normal;
   f->handle = h;
@@ -1541,7 +1513,7 @@ static bool parse_open_mode(
 /**
  * @brief io.open(filename [, mode]) - UTF-8 aware version
  */
-static int io_open_utf8(lua_State *L) {
+static int io_open_utf8(struct lua_State *L) {
   char const *const filename = luaL_checkstring(L, 1);
   char const *const mode = luaL_optstring(L, 2, "r");
 
@@ -1604,7 +1576,7 @@ static char const io_output_key[] = "gcmz_io_output";
 /**
  * @brief io.input([file]) - UTF-8 aware version
  */
-static int io_input_utf8(lua_State *L) {
+static int io_input_utf8(struct lua_State *L) {
   if (lua_gettop(L) == 0) {
     // Return current default input
     lua_getfield(L, LUA_REGISTRYINDEX, io_input_key);
@@ -1643,7 +1615,7 @@ static int io_input_utf8(lua_State *L) {
 /**
  * @brief io.output([file]) - UTF-8 aware version
  */
-static int io_output_utf8(lua_State *L) {
+static int io_output_utf8(struct lua_State *L) {
   if (lua_gettop(L) == 0) {
     // Return current default output
     lua_getfield(L, LUA_REGISTRYINDEX, io_output_key);
@@ -1682,7 +1654,7 @@ static int io_output_utf8(lua_State *L) {
 /**
  * @brief io.close([file]) - UTF-8 aware version
  */
-static int io_close_utf8(lua_State *L) {
+static int io_close_utf8(struct lua_State *L) {
   if (lua_gettop(L) == 0) {
     // No arguments - close default output
     lua_getfield(L, LUA_REGISTRYINDEX, io_output_key);
@@ -1712,7 +1684,7 @@ static int io_close_utf8(lua_State *L) {
 /**
  * @brief io.flush() - UTF-8 aware version
  */
-static int io_flush_utf8(lua_State *L) {
+static int io_flush_utf8(struct lua_State *L) {
   lua_getfield(L, LUA_REGISTRYINDEX, io_output_key);
   if (lua_isnil(L, -1)) {
     lua_pushnil(L);
@@ -1726,7 +1698,7 @@ static int io_flush_utf8(lua_State *L) {
 /**
  * @brief io.read(...) - UTF-8 aware version
  */
-static int io_read_utf8(lua_State *L) {
+static int io_read_utf8(struct lua_State *L) {
   lua_getfield(L, LUA_REGISTRYINDEX, io_input_key);
   if (lua_isnil(L, -1)) {
     return luaL_error(L, "no default input file");
@@ -1743,7 +1715,7 @@ static int io_read_utf8(lua_State *L) {
 /**
  * @brief io.write(...) - UTF-8 aware version
  */
-static int io_write_utf8(lua_State *L) {
+static int io_write_utf8(struct lua_State *L) {
   lua_getfield(L, LUA_REGISTRYINDEX, io_output_key);
   if (lua_isnil(L, -1)) {
     return luaL_error(L, "no default output file");
@@ -1768,7 +1740,7 @@ struct io_lines_state {
 /**
  * @brief __gc for io.lines state
  */
-static int io_lines_state_gc(lua_State *L) {
+static int io_lines_state_gc(struct lua_State *L) {
   struct io_lines_state *state = (struct io_lines_state *)lua_touserdata(L, 1);
   if (state && state->should_close && state->handle != INVALID_HANDLE_VALUE) {
     CloseHandle(state->handle);
@@ -1780,7 +1752,7 @@ static int io_lines_state_gc(lua_State *L) {
 /**
  * @brief Iterator function for io.lines(filename)
  */
-static int io_lines_file_iterator(lua_State *L) {
+static int io_lines_file_iterator(struct lua_State *L) {
   struct io_lines_state *state = (struct io_lines_state *)lua_touserdata(L, lua_upvalueindex(1));
   if (!state || state->handle == INVALID_HANDLE_VALUE) {
     return 0;
@@ -1814,7 +1786,7 @@ static int io_lines_file_iterator(lua_State *L) {
 /**
  * @brief io.lines([filename]) - UTF-8 aware version
  */
-static int io_lines_utf8(lua_State *L) {
+static int io_lines_utf8(struct lua_State *L) {
   if (lua_gettop(L) == 0 || lua_isnil(L, 1)) {
     // Use default input
     lua_getfield(L, LUA_REGISTRYINDEX, io_input_key);
@@ -1863,7 +1835,7 @@ static int io_lines_utf8(lua_State *L) {
 /**
  * @brief Setup file handle metatable
  */
-static void setup_io_file_metatable(lua_State *L) {
+static void setup_io_file_metatable(struct lua_State *L) {
   luaL_newmetatable(L, io_file_handle_key);
 
   // Methods
@@ -1900,7 +1872,7 @@ static void setup_io_file_metatable(lua_State *L) {
  *
  * Returns "file" for open file handles, "closed file" for closed handles, nil otherwise.
  */
-static int io_type_utf8(lua_State *L) {
+static int io_type_utf8(struct lua_State *L) {
   luaL_checkany(L, 1);
 
   struct io_file *f = get_file_handle(L, 1);
@@ -1922,7 +1894,7 @@ static int io_type_utf8(lua_State *L) {
  *
  * Opens a process and returns a file handle for reading or writing.
  */
-static int io_popen_utf8(lua_State *L) {
+static int io_popen_utf8(struct lua_State *L) {
   char const *const prog = luaL_checkstring(L, 1);
   char const *const mode = luaL_optstring(L, 2, "r");
 
@@ -2033,7 +2005,7 @@ cleanup:
  *
  * Creates a temporary file that is automatically deleted when closed.
  */
-static int io_tmpfile_utf8(lua_State *L) {
+static int io_tmpfile_utf8(struct lua_State *L) {
   wchar_t temp_path[MAX_PATH];
   wchar_t temp_file[MAX_PATH];
 
@@ -2072,7 +2044,7 @@ static int io_tmpfile_utf8(lua_State *L) {
  *
  * Returns an approximation of the amount of CPU time used by the program, in seconds.
  */
-static int os_clock_impl(lua_State *L) {
+static int os_clock_impl(struct lua_State *L) {
   clock_t const c = clock();
   lua_pushnumber(L, (lua_Number)c / (lua_Number)CLOCKS_PER_SEC);
   return 1;
@@ -2084,7 +2056,7 @@ static int os_clock_impl(lua_State *L) {
  * Returns the current time when called without arguments, or a time representing
  * the date and time specified by the given table.
  */
-static int os_time_impl(lua_State *L) {
+static int os_time_impl(struct lua_State *L) {
   time_t t;
   if (lua_isnoneornil(L, 1)) {
     t = time(NULL);
@@ -2124,7 +2096,7 @@ static int os_time_impl(lua_State *L) {
 /**
  * @brief os.difftime(t2, t1) - Returns the difference in seconds between two times
  */
-static int os_difftime_impl(lua_State *L) {
+static int os_difftime_impl(struct lua_State *L) {
   lua_Number const t1 = luaL_checknumber(L, 1);
   lua_Number const t2 = luaL_optnumber(L, 2, 0);
   lua_pushnumber(L, difftime((time_t)t1, (time_t)t2));
@@ -2134,7 +2106,7 @@ static int os_difftime_impl(lua_State *L) {
 /**
  * @brief Push tm fields to a table on the stack
  */
-static void push_tm_table(lua_State *L, struct tm const *ts, int isdst) {
+static void push_tm_table(struct lua_State *L, struct tm const *ts, int isdst) {
   lua_createtable(L, 0, 9);
   lua_pushinteger(L, ts->tm_sec);
   lua_setfield(L, -2, "sec");
@@ -2159,7 +2131,7 @@ static void push_tm_table(lua_State *L, struct tm const *ts, int isdst) {
 /**
  * @brief os.date([format [, time]]) - Returns formatted date/time string or table
  */
-static int os_date_impl(lua_State *L) {
+static int os_date_impl(struct lua_State *L) {
   char const *fmt = luaL_optstring(L, 1, "%c");
   time_t t;
   if (lua_isnoneornil(L, 2)) {
@@ -2201,7 +2173,7 @@ static int os_date_impl(lua_State *L) {
  *
  * Note: This is disabled for safety in plugin environment.
  */
-static int os_exit_impl(lua_State *L) {
+static int os_exit_impl(struct lua_State *L) {
   (void)L;
   return luaL_error(L, "os.exit is disabled in plugin environment");
 }
@@ -2211,7 +2183,7 @@ static int os_exit_impl(lua_State *L) {
  *
  * Executes a shell command. Returns true/nil, "exit"/"signal", exit_code.
  */
-static int os_execute_utf8(lua_State *L) {
+static int os_execute_utf8(struct lua_State *L) {
   char const *const cmd = luaL_optstring(L, 1, NULL);
 
   if (cmd == NULL) {
@@ -2281,7 +2253,7 @@ cleanup:
  *
  * Deletes a file or empty directory.
  */
-static int os_remove_utf8(lua_State *L) {
+static int os_remove_utf8(struct lua_State *L) {
   char const *const filename = luaL_checkstring(L, 1);
 
   wchar_t *filename_w = NULL;
@@ -2348,7 +2320,7 @@ cleanup:
  *
  * Renames/moves a file or directory.
  */
-static int os_rename_utf8(lua_State *L) {
+static int os_rename_utf8(struct lua_State *L) {
   char const *const oldname = luaL_checkstring(L, 1);
   char const *const newname = luaL_checkstring(L, 2);
 
@@ -2410,7 +2382,7 @@ cleanup:
  *
  * Returns a unique temporary filename as UTF-8 string.
  */
-static int os_tmpname_utf8(lua_State *L) {
+static int os_tmpname_utf8(struct lua_State *L) {
   wchar_t temp_path[MAX_PATH];
   wchar_t temp_file[MAX_PATH];
 
@@ -2440,7 +2412,7 @@ static int os_tmpname_utf8(lua_State *L) {
  *
  * Returns the value of environment variable as UTF-8 string.
  */
-static int os_getenv_utf8(lua_State *L) {
+static int os_getenv_utf8(struct lua_State *L) {
   char const *const varname = luaL_checkstring(L, 1);
 
   wchar_t *varname_w = NULL;
@@ -2503,7 +2475,7 @@ cleanup:
  * Calling setlocale can corrupt the UTF-8 environment, so this function
  * always returns an error to prevent accidental locale changes.
  */
-static int os_setlocale_disabled(lua_State *L) {
+static int os_setlocale_disabled(struct lua_State *L) {
   (void)L;
   return luaL_error(L, "os.setlocale is disabled to preserve UTF-8 environment");
 }
@@ -2514,7 +2486,7 @@ static int os_setlocale_disabled(lua_State *L) {
  * If the os library doesn't exist (e.g., LuaJIT built without os library),
  * this function creates the os table and provides all os functions.
  */
-static void setup_os_utf8_funcs(lua_State *L) {
+static void setup_os_utf8_funcs(struct lua_State *L) {
   lua_getglobal(L, "os");
   if (!lua_istable(L, -1)) {
     // os library doesn't exist, create it
@@ -2565,7 +2537,7 @@ static void setup_os_utf8_funcs(lua_State *L) {
 /**
  * @brief Setup UTF-8 aware io library functions
  */
-static void setup_io_utf8_funcs(lua_State *L) {
+static void setup_io_utf8_funcs(struct lua_State *L) {
   // Setup file handle metatables
   setup_io_file_metatable(L);
 
@@ -2648,7 +2620,7 @@ static void setup_io_utf8_funcs(lua_State *L) {
   lua_pop(L, 1);
 }
 
-void gcmz_lua_setup_utf8_funcs(lua_State *const L) {
+void gcmz_lua_setup_utf8_funcs(struct lua_State *const L) {
   if (!L) {
     return;
   }

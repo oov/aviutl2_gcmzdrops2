@@ -1,23 +1,12 @@
 #pragma once
 
-#ifdef __GNUC__
-#  ifndef __has_warning
-#    define __has_warning(x) 0
-#  endif
-#  pragma GCC diagnostic push
-#  if __has_warning("-Wreserved-macro-identifier")
-#    pragma GCC diagnostic ignored "-Wreserved-macro-identifier"
-#  endif
-#endif // __GNUC__
-#include <lualib.h>
-#ifdef __GNUC__
-#  pragma GCC diagnostic pop
-#endif // __GNUC__
-
 #include <ovbase.h>
 
-// Implementation function, use gcmz_luafn_err macro instead
-int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *const funcname);
+struct lua_State;
+
+// Do not call these functions directly; use the macros instead.
+int gcmz_luafn_err_(struct lua_State *const L, struct ov_error *const e, char const *const funcname);
+int gcmz_luafn_result_err_(struct lua_State *const L, struct ov_error *const e, char const *const funcname);
 
 /**
  * @brief Report error to Lua and clean up (raises error - does not return)
@@ -34,9 +23,6 @@ int gcmz_luafn_err_(lua_State *const L, struct ov_error *const e, char const *co
  * @return Result of lua_error (does not return)
  */
 #define gcmz_luafn_err(L, err) gcmz_luafn_err_((L), (err), (__func__))
-
-// Implementation function, use gcmz_luafn_result_err macro instead
-int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char const *const funcname);
 
 /**
  * @brief Return error as (nil, errmsg) to Lua and clean up
@@ -66,7 +52,7 @@ int gcmz_luafn_result_err_(lua_State *const L, struct ov_error *const e, char co
  * @param err [out] Error information on failure
  * @return true on success, false on failure
  */
-bool gcmz_lua_pcall(lua_State *const L, int nargs, int nresults, struct ov_error *const err);
+bool gcmz_lua_pcall(struct lua_State *const L, int nargs, int nresults, struct ov_error *const err);
 
 /**
  * @brief Convert UTF-8 string to wchar_t
@@ -126,4 +112,4 @@ NODISCARD bool gcmz_wchar_to_utf8(wchar_t const *src, char **dest, struct ov_err
  *
  * @param L Lua state
  */
-void gcmz_lua_setup_utf8_funcs(lua_State *const L);
+void gcmz_lua_setup_utf8_funcs(struct lua_State *const L);

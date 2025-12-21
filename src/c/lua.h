@@ -5,6 +5,7 @@
 struct gcmz_file_list;
 struct gcmz_lua_context;
 struct lua_State;
+struct aviutl2_script_module_table;
 
 /**
  * @brief Callback function type for registering Lua APIs
@@ -226,3 +227,27 @@ NODISCARD bool gcmz_lua_enum_handlers(struct gcmz_lua_context const *const ctx,
                                       gcmz_lua_handler_enum_callback callback,
                                       void *userdata,
                                       struct ov_error *const err);
+
+/**
+ * @brief Get the registry key for script modules table
+ *
+ * Returns a pointer to the static string used as the Lua registry key
+ * for the script modules table.
+ *
+ * @return Registry key string
+ */
+char const *gcmz_lua_get_script_modules_key(void);
+
+/**
+ * @brief Register a script module with the Lua context
+ *
+ * @param ctx Lua context instance
+ * @param table Script module table from external DLL
+ * @param module_name Module name (UTF-8)
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+NODISCARD bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
+                                               struct aviutl2_script_module_table *const table,
+                                               char const *const module_name,
+                                               struct ov_error *const err);

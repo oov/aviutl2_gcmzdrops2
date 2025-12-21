@@ -950,6 +950,34 @@ cleanup:
 }
 
 /**
+ * @brief gcmz.get_script_module(module_name) -> module table or nil
+ *
+ * Returns a script module table from the Lua registry.
+ * Module tables are registered via gcmz_lua_register_script_module() from lua.c.
+ */
+static int gcmz_lua_get_script_module(lua_State *const L) {
+  if (!g_lua_api_options.script_modules_key) {
+    lua_pushnil(L);
+    return 1;
+  }
+
+  char const *const module_name = luaL_checkstring(L, 1);
+
+  // Get modules table from registry
+  lua_getfield(L, LUA_REGISTRYINDEX, g_lua_api_options.script_modules_key);
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_pushnil(L);
+    return 1;
+  }
+
+  // Get the module by name
+  lua_getfield(L, -1, module_name);
+  lua_remove(L, -2); // Remove modules table, keep module or nil
+  return 1;
+}
+
+/**
  * @brief Register all gcmz Lua APIs to the given Lua state
  *
  * Creates a global 'gcmz' table with all available APIs.
@@ -979,6 +1007,8 @@ bool gcmz_lua_api_register(struct lua_State *const L, struct ov_error *const err
   lua_setfield(L, -2, "get_project_data");
   lua_pushcfunction(L, gcmz_lua_get_script_directory);
   lua_setfield(L, -2, "get_script_directory");
+  lua_pushcfunction(L, gcmz_lua_get_script_module);
+  lua_setfield(L, -2, "get_script_module");
   lua_pushcfunction(L, gcmz_lua_get_versions);
   lua_setfield(L, -2, "get_versions");
   lua_pushcfunction(L, gcmz_lua_save_file);

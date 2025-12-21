@@ -207,6 +207,7 @@ add_library(gcmzdrops SHARED
   logf.c
   lua.c
   lua_api.c
+  lua_script_module_param.c
   luautil.c
   sniffer.c
   temp.c
@@ -335,7 +336,7 @@ add_custom_command(
 )
 add_custom_target(lua_plugin_test_scripts ALL DEPENDS ${LUA_PLUGIN_TEST_OUTPUTS})
 
-add_executable(test_lua lua_test.c file.c lua.c luautil.c)
+add_executable(test_lua lua_test.c file.c lua.c luautil.c lua_script_module_param.c)
 target_link_libraries(test_lua PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"
@@ -350,6 +351,18 @@ target_compile_definitions(test_lua PRIVATE
 )
 add_test(NAME test_lua COMMAND test_lua)
 add_dependencies(test_lua test_cleanup test_unicode test_plugin_cmodule lua_plugin_test_scripts)
+
+add_executable(test_lua_script_module lua_script_module_test.c file.c lua.c luautil.c lua_script_module_param.c)
+target_link_libraries(test_lua_script_module PRIVATE
+  gcmzdrops_intf
+  "${LUAJIT_DLL}"
+  ovbase
+  ovl
+  yyjson
+  comctl32
+  shlwapi
+)
+add_test(NAME test_lua_script_module COMMAND test_lua_script_module)
 
 add_executable(test_luautil luautil_test.c luautil.c)
 target_link_libraries(test_luautil PRIVATE
@@ -369,7 +382,7 @@ target_link_libraries(test_lua_api PRIVATE
 )
 add_test(NAME test_lua_api COMMAND test_lua_api)
 
-add_executable(test_exo_lua exo_lua_test.c logf.c lua_api.c luautil.c lua.c file.c ini_reader.c)
+add_executable(test_exo_lua exo_lua_test.c logf.c lua_api.c luautil.c lua.c file.c ini_reader.c lua_script_module_param.c)
 target_link_libraries(test_exo_lua PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"
@@ -487,7 +500,7 @@ target_link_libraries(test_api PRIVATE
 )
 add_test(NAME test_api COMMAND test_api)
 
-add_executable(test_copy copy_test.c json.c do.c api.c drop.c file.c ini_reader.c lua.c lua_api.c luautil.c dataobj.c dataobj_stream.c datauri.c sniffer.c temp.c logf.c)
+add_executable(test_copy copy_test.c json.c do.c api.c drop.c file.c ini_reader.c lua.c lua_api.c luautil.c lua_script_module_param.c dataobj.c dataobj_stream.c datauri.c sniffer.c temp.c logf.c)
 target_link_libraries(test_copy PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"

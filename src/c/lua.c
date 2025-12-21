@@ -4,7 +4,10 @@
 #include "file_ext.h"
 #include "gcmz_types.h"
 #include "logf.h"
+#include "lua_script_module_param.h"
 #include "luautil.h"
+
+#include <aviutl2_module2.h>
 
 #include <ovarray.h>
 #include <ovmo.h>
@@ -1168,6 +1171,129 @@ NODISCARD bool gcmz_lua_enum_handlers(struct gcmz_lua_context const *const ctx,
   result = true;
 
 cleanup:
+  lua_settop(L, base_top);
+  return result;
+}
+
+static char const script_modules_key[] = "gcmz_script_modules";
+static char const script_module_mt[] = "gcmz_script_module_mt";
+
+char const *gcmz_lua_get_script_modules_key(void) { return script_modules_key; }
+
+/**
+ * @brief C closure that wraps a script module function
+ *
+ * Upvalue 1: function pointer (lightuserdata)
+ */
+static int script_module_function_wrapper(lua_State *const L) {
+  void (*func)(struct aviutl2_script_module_param *) =
+      (void (*)(struct aviutl2_script_module_param *))lua_touserdata(L, lua_upvalueindex(1));
+  return script_module_param_call(L, func);
+}
+
+/**
+ * @brief __newindex metamethod that prevents modification
+ */
+static int script_module_newindex(lua_State *const L) { return luaL_error(L, "cannot modify script module table"); }
+
+bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
+                                     struct aviutl2_script_module_table *const table,
+                                     char const *const module_name,
+                                     struct ov_error *const err) {
+  if (!ctx || !ctx->L || !table || !module_name || !*module_name) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  lua_State *L = ctx->L;
+  int const base_top = lua_gettop(L);
+  char *func_name_heap = NULL;
+  bool result = false;
+
+  {
+    // Get or create the script modules registry table
+    lua_getfield(L, LUA_REGISTRYINDEX, script_modules_key);
+    if (lua_isnil(L, -1)) {
+      lua_pop(L, 1);
+      lua_newtable(L);
+      lua_pushvalue(L, -1);
+      lua_setfield(L, LUA_REGISTRYINDEX, script_modules_key);
+    }
+    // Stack: [modules_table]
+
+    // Check if module already exists
+    lua_getfield(L, -1, module_name);
+    if (!lua_isnil(L, -1)) {
+      lua_pop(L, 2);
+      OV_ERROR_SETF(err,
+                    ov_error_type_generic,
+                    ov_error_generic_invalid_argument,
+                    "%1$hs",
+                    "script module '%1$hs' is already registered",
+                    module_name);
+      goto cleanup;
+    }
+    lua_pop(L, 1); // Pop nil
+    // Stack: [modules_table]
+
+    // Create the module table (the actual table that holds functions)
+    lua_newtable(L);
+    // Stack: [modules_table, module_table]
+
+    // Add functions to the module table
+    for (struct aviutl2_script_module_function const *f = table->functions; f && f->name; ++f) {
+      // Convert wchar_t function name to UTF-8
+      size_t const wlen = wcslen(f->name);
+      size_t const utf8_len = ov_wchar_to_utf8_len(f->name, wlen);
+      if (utf8_len == 0) {
+        continue; // Skip invalid function names
+      }
+
+      char func_name_stack[64];
+      char *func_name_utf8 = func_name_stack;
+      if (utf8_len >= sizeof(func_name_stack)) {
+        if (!OV_ARRAY_GROW(&func_name_heap, utf8_len + 1)) {
+          OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+          goto cleanup;
+        }
+        func_name_utf8 = func_name_heap;
+      }
+      ov_wchar_to_utf8(f->name, wlen, func_name_utf8, utf8_len + 1, NULL);
+
+      // Create closure with function pointer as upvalue
+      lua_pushlightuserdata(L, (void *)f->func);
+      lua_pushcclosure(L, script_module_function_wrapper, 1);
+      lua_setfield(L, -2, func_name_utf8);
+    }
+    // Stack: [modules_table, module_table]
+
+    // Create metatable for protection
+    luaL_getmetatable(L, script_module_mt);
+    if (lua_isnil(L, -1)) {
+      lua_pop(L, 1);
+      luaL_newmetatable(L, script_module_mt);
+      lua_pushcfunction(L, script_module_newindex);
+      lua_setfield(L, -2, "__newindex");
+      // Make the metatable non-accessible
+      lua_pushboolean(L, 0);
+      lua_setfield(L, -2, "__metatable");
+    }
+    lua_setmetatable(L, -2);
+    // Stack: [modules_table, module_table (with metatable)]
+
+    // Store module in the registry table
+    lua_setfield(L, -2, module_name);
+    // Stack: [modules_table]
+    lua_pop(L, 1);
+    // Stack: []
+  }
+
+  result = true;
+
+cleanup:
+  if (func_name_heap) {
+    OV_ARRAY_DESTROY(&func_name_heap);
+  }
   lua_settop(L, base_top);
   return result;
 }
