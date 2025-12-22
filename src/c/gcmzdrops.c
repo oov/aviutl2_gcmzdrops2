@@ -1346,6 +1346,37 @@ static bool lua_drag_enter_adapter(struct gcmz_file_list *file_list,
   return gcmz_lua_call_drag_enter(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
 }
 
+/**
+ * @brief Context for lua_drop_adapter_edit_section callback
+ */
+struct lua_drop_adapter_context {
+  struct gcmzdrops *ctx;
+  struct gcmz_file_list *file_list;
+  uint32_t key_state;
+  uint32_t modifier_keys;
+  bool from_api;
+  struct ov_error *err;
+  bool result;
+};
+
+/**
+ * @brief Edit section callback for lua_drop_adapter
+ *
+ * Sets current_edit_section and calls gcmz_lua_call_drop within the edit section.
+ */
+static void lua_drop_adapter_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct lua_drop_adapter_context *const ldc = (struct lua_drop_adapter_context *)param;
+  if (!ldc || !ldc->ctx || !edit) {
+    return;
+  }
+
+  struct gcmzdrops *const ctx = ldc->ctx;
+  ctx->current_edit_section = edit;
+  ldc->result =
+      gcmz_lua_call_drop(ctx->lua_ctx, ldc->file_list, ldc->key_state, ldc->modifier_keys, ldc->from_api, ldc->err);
+  ctx->current_edit_section = NULL;
+}
+
 static bool lua_drop_adapter(struct gcmz_file_list *file_list,
                              uint32_t key_state,
                              uint32_t modifier_keys,
@@ -1357,7 +1388,29 @@ static bool lua_drop_adapter(struct gcmz_file_list *file_list,
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
   }
-  return gcmz_lua_call_drop(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
+
+  // If already in an edit section (e.g., called from gcmz_drop_simulate_drop), call directly
+  if (ctx->current_edit_section) {
+    return gcmz_lua_call_drop(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
+  }
+
+  // Otherwise, enter edit section for Lua processing
+  if (!ctx->edit || !ctx->edit->call_edit_section_param) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
+    return false;
+  }
+
+  struct lua_drop_adapter_context ldc = {
+      .ctx = ctx,
+      .file_list = file_list,
+      .key_state = key_state,
+      .modifier_keys = modifier_keys,
+      .from_api = from_api,
+      .err = err,
+      .result = false,
+  };
+  ctx->edit->call_edit_section_param(&ldc, lua_drop_adapter_edit_section);
+  return ldc.result;
 }
 
 static bool lua_drag_leave_adapter(void *userdata, struct ov_error *const err) {
