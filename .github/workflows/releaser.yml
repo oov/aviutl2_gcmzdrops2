@@ -78,7 +78,9 @@ jobs:
       - name: Install Inno Setup
         shell: bash
         run: |
-          winget install --id JRSoftware.InnoSetup -e -s winget
+          # Exit code is based on lower 16 bits of HRESULT (0x8A15002B & 0xFFFF = 43)
+          # 43 = APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (already installed, no update available)
+          winget install --id JRSoftware.InnoSetup -e -s winget --accept-source-agreements --accept-package-agreements || test $? -eq 43
       - name: Build installer
         shell: bash
         run: |
