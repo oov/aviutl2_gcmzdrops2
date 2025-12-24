@@ -14,8 +14,6 @@
 #include <ole2.h>
 #include <shlobj.h>
 
-#include "file_ext.h"
-
 #ifdef __GNUC__
 #  ifndef __has_warning
 #    define __has_warning(x) 0
@@ -484,7 +482,7 @@ static aviutl2_object_handle insert_files_to_timeline(struct gcmz_file_list cons
       gcmz_logf_warn(NULL, "%1$ls", gettext("skipping file with no extension: %1$ls"), file->path);
       continue;
     }
-    if (gcmz_extension_equals(ext, L".object")) {
+    if (ovl_path_is_same_ext(ext, L".object")) {
       aviutl2_object_handle obj = create_object_from_file(file->path, edit, current_layer, frame, err);
       if (!obj) {
         gcmz_logf_warn(err, "%1$ls", gettext("failed to insert file: %1$ls"), file->path);
@@ -502,7 +500,7 @@ static aviutl2_object_handle insert_files_to_timeline(struct gcmz_file_list cons
       }
       continue;
     }
-    if (gcmz_extension_equals(ext, L".txt")) {
+    if (ovl_path_is_same_ext(ext, L".txt")) {
       aviutl2_object_handle obj = create_text_object(file->path, edit, current_layer, frame, err);
       if (!obj) {
         gcmz_logf_warn(err, "%1$ls", gettext("failed to insert file: %1$ls"), file->path);

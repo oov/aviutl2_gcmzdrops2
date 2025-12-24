@@ -151,8 +151,6 @@ static wchar_t const *get_extension_from_filename(wchar_t const *const filename)
   return dot ? dot : p;
 }
 
-#include "file_ext.h"
-
 static void uint32_to_hex8(uint32_t value, wchar_t *buf8) {
   static wchar_t const hex_chars[] = L"0123456789abcdef";
   for (int i = 7; i >= 0; i--) {
@@ -245,7 +243,7 @@ is_copy_needed(wchar_t const *const file_path, enum gcmz_processing_mode process
     wchar_t const *ext = get_extension_from_filename(filename);
     size_t const ignore_count = sizeof(ignore_extensions) / sizeof(ignore_extensions[0]);
     for (size_t i = 0; i < ignore_count; ++i) {
-      if (gcmz_extension_equals(ext, ignore_extensions[i])) {
+      if (ovl_path_is_same_ext(ext, ignore_extensions[i])) {
         return ov_false;
       }
     }

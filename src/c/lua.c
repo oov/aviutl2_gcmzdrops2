@@ -1,20 +1,5 @@
 #include "lua.h"
 
-#include "file.h"
-#include "file_ext.h"
-#include "gcmz_types.h"
-#include "logf.h"
-#include "lua_script_module_param.h"
-#include "luautil.h"
-
-#include <aviutl2_module2.h>
-
-#include <ovarray.h>
-#include <ovmo.h>
-#include <ovprintf.h>
-#include <ovrand.h>
-#include <ovutf.h>
-
 #ifdef __GNUC__
 #  ifndef __has_warning
 #    define __has_warning(x) 0
@@ -33,6 +18,22 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
+#include <ovarray.h>
+#include <ovmo.h>
+#include <ovprintf.h>
+#include <ovrand.h>
+#include <ovutf.h>
+
+#include <ovl/path.h>
+
+#include <aviutl2_module2.h>
+
+#include "file.h"
+#include "gcmz_types.h"
+#include "logf.h"
+#include "lua_script_module_param.h"
+#include "luautil.h"
 
 struct gcmz_lua_context {
   lua_State *L;
@@ -568,10 +569,8 @@ static bool setup_plugin_loading(struct gcmz_lua_context *ctx, wchar_t const *sc
         }
       } else {
         // For files, check for .lua or .dll extension
-        bool const is_lua =
-            (filename_len > 4 && gcmz_extension_equals(find_data.cFileName + filename_len - 4, L".lua"));
-        bool const is_dll =
-            (filename_len > 4 && gcmz_extension_equals(find_data.cFileName + filename_len - 4, L".dll"));
+        bool const is_lua = (filename_len > 4 && ovl_path_is_same_ext(find_data.cFileName + filename_len - 4, L".lua"));
+        bool const is_dll = (filename_len > 4 && ovl_path_is_same_ext(find_data.cFileName + filename_len - 4, L".dll"));
         if (!is_lua && !is_dll) {
           continue;
         }

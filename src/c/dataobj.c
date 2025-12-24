@@ -17,6 +17,8 @@
 #include <shlobj.h>
 
 #include <ovarray.h>
+
+#include <ovl/path.h>
 #include <ovl/source.h>
 
 #include "dataobj_stream.h"
@@ -24,8 +26,6 @@
 #include "file.h"
 #include "sniffer.h"
 #include "temp.h"
-
-#include "file_ext.h"
 
 static size_t extract_file_name(wchar_t const *path) {
   if (!path) {
@@ -189,57 +189,57 @@ static wchar_t const *detect_mime_type_from_extension(wchar_t const *filename) {
   }
 
   wchar_t const *ext = filename + ext_pos;
-  if (gcmz_extension_equals(ext, L".txt")) {
+  if (ovl_path_is_same_ext(ext, L".txt")) {
     return L"text/plain";
-  } else if (gcmz_extension_equals(ext, L".html") || gcmz_extension_equals(ext, L".htm")) {
+  } else if (ovl_path_is_same_ext(ext, L".html") || ovl_path_is_same_ext(ext, L".htm")) {
     return L"text/html";
-  } else if (gcmz_extension_equals(ext, L".css")) {
+  } else if (ovl_path_is_same_ext(ext, L".css")) {
     return L"text/css";
-  } else if (gcmz_extension_equals(ext, L".js")) {
+  } else if (ovl_path_is_same_ext(ext, L".js")) {
     return L"application/javascript";
-  } else if (gcmz_extension_equals(ext, L".json")) {
+  } else if (ovl_path_is_same_ext(ext, L".json")) {
     return L"application/json";
-  } else if (gcmz_extension_equals(ext, L".xml")) {
+  } else if (ovl_path_is_same_ext(ext, L".xml")) {
     return L"application/xml";
-  } else if (gcmz_extension_equals(ext, L".pdf")) {
+  } else if (ovl_path_is_same_ext(ext, L".pdf")) {
     return L"application/pdf";
-  } else if (gcmz_extension_equals(ext, L".zip")) {
+  } else if (ovl_path_is_same_ext(ext, L".zip")) {
     return L"application/zip";
-  } else if (gcmz_extension_equals(ext, L".rar")) {
+  } else if (ovl_path_is_same_ext(ext, L".rar")) {
     return L"application/x-rar-compressed";
-  } else if (gcmz_extension_equals(ext, L".7z")) {
+  } else if (ovl_path_is_same_ext(ext, L".7z")) {
     return L"application/x-7z-compressed";
-  } else if (gcmz_extension_equals(ext, L".png")) {
+  } else if (ovl_path_is_same_ext(ext, L".png")) {
     return L"image/png";
-  } else if (gcmz_extension_equals(ext, L".jpg") || gcmz_extension_equals(ext, L".jpeg")) {
+  } else if (ovl_path_is_same_ext(ext, L".jpg") || ovl_path_is_same_ext(ext, L".jpeg")) {
     return L"image/jpeg";
-  } else if (gcmz_extension_equals(ext, L".gif")) {
+  } else if (ovl_path_is_same_ext(ext, L".gif")) {
     return L"image/gif";
-  } else if (gcmz_extension_equals(ext, L".bmp")) {
+  } else if (ovl_path_is_same_ext(ext, L".bmp")) {
     return L"image/bmp";
-  } else if (gcmz_extension_equals(ext, L".svg")) {
+  } else if (ovl_path_is_same_ext(ext, L".svg")) {
     return L"image/svg+xml";
-  } else if (gcmz_extension_equals(ext, L".ico")) {
+  } else if (ovl_path_is_same_ext(ext, L".ico")) {
     return L"image/x-icon";
-  } else if (gcmz_extension_equals(ext, L".mp3")) {
+  } else if (ovl_path_is_same_ext(ext, L".mp3")) {
     return L"audio/mpeg";
-  } else if (gcmz_extension_equals(ext, L".wav")) {
+  } else if (ovl_path_is_same_ext(ext, L".wav")) {
     return L"audio/wav";
-  } else if (gcmz_extension_equals(ext, L".mp4")) {
+  } else if (ovl_path_is_same_ext(ext, L".mp4")) {
     return L"video/mp4";
-  } else if (gcmz_extension_equals(ext, L".avi")) {
+  } else if (ovl_path_is_same_ext(ext, L".avi")) {
     return L"video/x-msvideo";
-  } else if (gcmz_extension_equals(ext, L".doc")) {
+  } else if (ovl_path_is_same_ext(ext, L".doc")) {
     return L"application/msword";
-  } else if (gcmz_extension_equals(ext, L".docx")) {
+  } else if (ovl_path_is_same_ext(ext, L".docx")) {
     return L"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  } else if (gcmz_extension_equals(ext, L".xls")) {
+  } else if (ovl_path_is_same_ext(ext, L".xls")) {
     return L"application/vnd.ms-excel";
-  } else if (gcmz_extension_equals(ext, L".xlsx")) {
+  } else if (ovl_path_is_same_ext(ext, L".xlsx")) {
     return L"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  } else if (gcmz_extension_equals(ext, L".ppt")) {
+  } else if (ovl_path_is_same_ext(ext, L".ppt")) {
     return L"application/vnd.ms-powerpoint";
-  } else if (gcmz_extension_equals(ext, L".pptx")) {
+  } else if (ovl_path_is_same_ext(ext, L".pptx")) {
     return L"application/vnd.openxmlformats-officedocument.presentationml.presentation";
   } else {
     return default_mime;
@@ -298,7 +298,7 @@ static void sanitize_filename(NATIVE_CHAR *filename) {
 
   for (int i = 0; reserved_names[i]; ++i) {
     // extension_equals actually wcsicmp() == 0 for ASCIIs, so it works here.
-    if (gcmz_extension_equals(filename, reserved_names[i])) {
+    if (ovl_path_is_same_ext(filename, reserved_names[i])) {
       filename[0] = L'-';
       break;
     }
