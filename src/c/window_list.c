@@ -4,7 +4,7 @@
 
 #include <string.h>
 
-enum { max_windows = 8 };
+enum { max_windows = 16 };
 
 struct gcmz_window_list {
   void *items[max_windows];

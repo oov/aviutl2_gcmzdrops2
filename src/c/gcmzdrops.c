@@ -1585,7 +1585,7 @@ cleanup:
 static void on_change_activate(void *const userdata) {
   struct gcmzdrops *const ctx = (struct gcmzdrops *)userdata;
   enum {
-    max_windows = 8,
+    max_windows = 16,
   };
 
   void *windows[max_windows] = {0};
