@@ -102,7 +102,7 @@ static void test_update_too_many_windows(void) {
   struct gcmz_window_list *wl = gcmz_window_list_create(&err);
   TEST_ASSERT_SUCCEEDED(wl != NULL, &err);
 
-  enum { num_windows = 9 };
+  enum { num_windows = 17 };
   void *windows[num_windows];
   for (size_t i = 0; i < num_windows; ++i) {
     windows[i] = (void *)(uintptr_t)(0x1000 + i * 0x1000);

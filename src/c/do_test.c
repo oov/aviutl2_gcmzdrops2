@@ -159,6 +159,12 @@ static void test_do_same_thread(void) {
   void *test_data = (void *)0x12345;
   gcmz_do(test_func, test_data);
 
+  MSG msg;
+  while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+
   TEST_CHECK(g_test_func_call_count == 1);
   TEST_CHECK(g_test_func_data == test_data);
 
