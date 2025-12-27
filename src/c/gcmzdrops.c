@@ -1575,34 +1575,6 @@ cleanup:
 }
 
 /**
- * Callback function invoked when the host is ready
- *
- * This signals that the main window is fully initialized and user interaction has begun.
- *
- * @param userdata User-defined data pointer (struct gcmzdrops*)
- */
-static void on_ready(void *const userdata) {
-  struct gcmzdrops *const ctx = (struct gcmzdrops *)userdata;
-  if (!ctx) {
-    return;
-  }
-
-  // FIXME:
-  // As of version2.0beta24a, even if you register a handler with host->register_project_load_handler() in
-  // RegisterPlugin, the handler is not called only when a new project is automatically created at the beginning of a
-  // normal startup. Also, calling host->create_edit_handle()->get_edit_info() in RegisterPlugin causes a crash. The
-  // same applies to host->create_edit_handle()->call_edit_section() and
-  // host->create_edit_handle()->call_edit_section_param(). Because of this, there is no appropriate timing to get
-  // project settings only when creating a new project, and there is no appropriate initialization timing for the
-  // external cooperation API. Therefore, at present, this is avoided by treating the timing of WM_USER or WM_MOUSEMOVE
-  // coming to the main window as the completion of initialization.
-  mtx_lock(&ctx->init_mtx);
-  ctx->plugin_state = gcmzdrops_plugin_state_registered;
-  cnd_signal(&ctx->init_cond);
-  mtx_unlock(&ctx->init_mtx);
-}
-
-/**
  * Callback function invoked when the active window state changes.
  *
  * This callback is called frequently by gcmz_do_init, so performance is important.
@@ -1978,13 +1950,13 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
   }
 
   // Check minimum required AviUtl ExEdit2 version
-  if (version < 2002401) {
+  if (version < 2002600) {
     OV_ERROR_SETF(err,
                   ov_error_type_generic,
                   ov_error_generic_fail,
                   "%1$s",
                   gettext("GCMZDrops requires AviUtl ExEdit2 %1$s or later."),
-                  "version2.0beta24a");
+                  "version2.0beta26");
     return false;
   }
 
@@ -2013,13 +1985,6 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
     }
     c->plugin_state = gcmzdrops_plugin_state_initializing;
 
-    c->do_sub = gcmz_do_sub_create(err);
-    if (!c->do_sub) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
-    gcmz_do_sub_do(c->do_sub, delayed_initialization, c);
-
     {
       HWND main_window = NULL;
       if (!find_manager_windows(&main_window, 1, err)) {
@@ -2030,7 +1995,6 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
               &(struct gcmz_do_init_option){
                   .window = main_window,
                   .on_change_activate = on_change_activate,
-                  .on_ready = on_ready,
                   .userdata = c,
               },
               err)) {
@@ -2039,6 +2003,13 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
       }
     }
     gcmz_error_set_owner_window_callback(get_error_dialog_owner_window);
+
+    c->do_sub = gcmz_do_sub_create(err);
+    if (!c->do_sub) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
+    }
+    gcmz_do_sub_do(c->do_sub, delayed_initialization, c);
 
     if (!gcmz_temp_create_directory(err)) {
       OV_ERROR_ADD_TRACE(err);
@@ -2122,10 +2093,6 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
       OV_ERROR_ADD_TRACE(err);
       goto cleanup;
     }
-
-    // Initial window list update and drop registration
-    // Use gcmz_do to ensure this runs on the window thread for proper subclass installation
-    gcmz_do(on_change_activate, c);
 
     {
       HICON icon = load_icon(err);
@@ -2214,14 +2181,15 @@ void gcmzdrops_on_project_load(struct gcmzdrops *const ctx, struct aviutl2_proje
     wcscpy(ctx->project_path, project_path);
   }
 
-  {
-    mtx_lock(&ctx->init_mtx);
-    bool const initialized = ctx->plugin_state == gcmzdrops_plugin_state_registered;
-    mtx_unlock(&ctx->init_mtx);
-    if (initialized) {
-      gcmz_do_sub_do(ctx->do_sub, update_api_project_data, ctx);
-    }
+  mtx_lock(&ctx->init_mtx);
+  if (ctx->plugin_state != gcmzdrops_plugin_state_registered) {
+    ctx->plugin_state = gcmzdrops_plugin_state_registered;
+    cnd_signal(&ctx->init_cond);
+  } else {
+    gcmz_do(update_api_project_data, ctx);
   }
+  mtx_unlock(&ctx->init_mtx);
+
   success = true;
 cleanup:
   if (!success) {
