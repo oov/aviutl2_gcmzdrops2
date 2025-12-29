@@ -12,6 +12,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
 msgid "&Add"
 msgstr "添加(&A)"
@@ -138,9 +139,13 @@ msgstr "GCMZDrops设置"
 msgid "GCMZDrops Settings..."
 msgstr "GCMZDrops设置..."
 
-#, fuzzy, c-format
+#, c-format
 msgid "GCMZDrops requires AviUtl ExEdit2 %1$s or later."
 msgstr "GCMZDrops需要AviUtl ExEdit2 %1$s或更高版本。"
+
+msgctxt "script_type"
+msgid "Handler"
+msgstr "句柄"
 
 msgid "M&inute"
 msgstr "分(&I)"
@@ -154,6 +159,10 @@ msgstr "下移(&D)"
 msgid "Move &Up"
 msgstr "上移(&U)"
 
+msgctxt "script_info"
+msgid "Name"
+msgstr "名称"
+
 msgid "OK"
 msgstr "确定"
 
@@ -165,6 +174,10 @@ msgstr "优先复制"
 
 msgid "Prefer direct read"
 msgstr "优先直接读取"
+
+msgctxt "script_info"
+msgid "Priority"
+msgstr "优先级"
 
 msgctxt "external_api"
 msgid "Retry?"
@@ -179,6 +192,22 @@ msgstr "秒(&E)"
 
 msgid "Save Destination"
 msgstr "保存位置"
+
+msgctxt "config_dialog"
+msgid "Script Info"
+msgstr "脚本信息"
+
+msgctxt "script_type"
+msgid "Script Module"
+msgstr "脚本模块"
+
+msgctxt "config_dialog"
+msgid "Settings"
+msgstr "GCMZDrops设置"
+
+msgctxt "script_info"
+msgid "Source"
+msgstr "注册来源"
 
 msgid ""
 "Specifies where to create files when dropping images from the browser, etc.\n"
@@ -219,6 +248,10 @@ msgstr ""
 "\n"
 "若取消，插件将在没有外部API的情况下继续运行。"
 
+msgctxt "script_info"
+msgid "Type"
+msgstr "类型"
+
 msgid "[GCMZDrops] Paste from Clipboard"
 msgstr "[GCMZDrops]从剪贴板粘贴"
 
@@ -228,7 +261,7 @@ msgstr ""
 "Microsoft YaHei\n"
 "SimSun"
 
-#, fuzzy, c-format
+#, c-format
 msgid "error occurred while executing %1$s script handler"
 msgstr "执行 %1$s 脚本处理器时发生错误"
 
@@ -240,13 +273,12 @@ msgctxt "external_api"
 msgid "external API initialized successfully"
 msgstr "外部API初始化成功"
 
-#, fuzzy
-msgid "failed to add handler script %1$hs"
-msgstr "处理器脚本 %1$hs 添加失败"
-
-#, fuzzy, c-format
+#, c-format
 msgid "failed to add handler script file %1$ls"
 msgstr "处理器脚本文件 %1$ls 添加失败"
+
+msgid "failed to add handler script from %1$hs"
+msgstr "处理器脚本 %1$hs 添加失败"
 
 msgid "failed to clean up temporary file"
 msgstr "临时文件清理失败"
@@ -255,7 +287,6 @@ msgctxt "cleanup_stale_temporary_directories"
 msgid "failed to cleanup stale temporary directories"
 msgstr "过时的临时目录清理失败"
 
-#, fuzzy
 msgid "failed to complete delayed initialization"
 msgstr "托盘图标可见性更新失败"
 
@@ -268,7 +299,6 @@ msgstr "来自外部API请求的拖放失败"
 msgid "failed to get external API setting"
 msgstr "外部API设置获取失败"
 
-#, fuzzy
 msgid "failed to handle project load"
 msgstr "工程加载处理失败"
 
@@ -278,32 +308,28 @@ msgstr "外部API初始化失败"
 msgid "failed to initialize external API, continuing without it."
 msgstr "外部API初始化失败，将在不使用API的情况下继续。"
 
-#, fuzzy, c-format
+#, c-format
 msgid "failed to insert file: %1$ls"
 msgstr "处理器脚本文件 %1$ls 添加失败"
 
-#, fuzzy
 msgid "failed to insert files into timeline"
 msgstr "条件变量初始化失败"
-
-msgid "failed to load language resources, continuing without them."
-msgstr "语言资源加载失败，将在没有语言资源的情况下继续。"
 
 msgid "failed to paste from clipboard"
 msgstr "从剪贴板粘贴失败"
 
+msgid "failed to register script module %1$hs from %2$hs"
+msgstr "从 %2$hs 注册脚本模块 %1$hs 失败"
+
 msgid "failed to remove temporary directory"
 msgstr "临时目录删除失败"
 
-#, fuzzy
 msgid "failed to update external api project information"
 msgstr "外部API项目数据更新失败"
 
-#, fuzzy
 msgid "failed to update settings"
 msgstr "设置更新失败"
 
-#, fuzzy
 msgid "insertion position collision detected, cannot insert with specified margin"
 msgstr "检测到插入位置冲突，无法按指定的边距插入"
 
@@ -316,15 +342,14 @@ msgctxt "cleanup_stale_temporary_directories"
 msgid "removed: %1$ls"
 msgstr "已删除: %1$ls"
 
-#, fuzzy, c-format
+#, c-format
 msgid "skipping file with no extension: %1$ls"
 msgstr "跳过无扩展名的文件: %1$ls"
 
-#, fuzzy
 msgid "skipping invalid file in list"
 msgstr "跳过列表中的无效文件"
 
-#, fuzzy, c-format
+#, c-format
 msgid "skipping unsupported file: %1$ls"
 msgstr "跳过不支持的文件: %1$ls"
 
