@@ -730,7 +730,7 @@ bool gcmz_config_save(struct gcmz_config const *const config, struct ov_error *c
       if (path_converted == 0) {
         continue; // Skip conversion failures
       }
-      yyjson_mut_arr_add_str(doc, save_paths_array, path_utf8);
+      yyjson_mut_arr_add_strcpy(doc, save_paths_array, path_utf8);
     }
 
     json_str = yyjson_mut_write_opts(doc, YYJSON_WRITE_PRETTY, gcmz_json_get_alc(), NULL, NULL);

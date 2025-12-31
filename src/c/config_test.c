@@ -428,6 +428,65 @@ static void test_config_expand_vars_undefined_variables(void) {
   OV_ARRAY_DESTROY(&expanded);
 }
 
+static void test_config_save_load_multiple_paths(void) {
+  struct gcmz_config *config1 = NULL;
+  struct gcmz_config *config2 = NULL;
+  struct ov_error err = {0};
+
+  // Test paths of various lengths, including long paths like OneDrive paths
+  wchar_t const *test_paths[] = {
+      L"C:\\Users\\TestUser\\OneDrive - Company Name\\Documents\\Projects\\VideoEditing\\Assets",
+      L"D:\\ShortPath",
+      L"E:\\AnotherLongPath\\With\\Many\\Subdirectories\\That\\Could\\Be\\Problematic",
+  };
+  size_t const num_paths = sizeof(test_paths) / sizeof(test_paths[0]);
+
+  {
+    config1 = gcmz_config_create(NULL, &err);
+    if (!TEST_SUCCEEDED(config1 != NULL, &err)) {
+      goto cleanup;
+    }
+
+    // Set multiple paths
+    if (!TEST_SUCCEEDED(gcmz_config_set_save_paths(config1, test_paths, num_paths, &err), &err)) {
+      goto cleanup;
+    }
+
+    // Save configuration
+    if (!TEST_SUCCEEDED(gcmz_config_save(config1, &err), &err)) {
+      goto cleanup;
+    }
+
+    // Create new config and load
+    config2 = gcmz_config_create(NULL, &err);
+    if (!TEST_SUCCEEDED(config2 != NULL, &err)) {
+      goto cleanup;
+    }
+
+    if (!TEST_SUCCEEDED(gcmz_config_load(config2, &err), &err)) {
+      goto cleanup;
+    }
+
+    // Verify all paths are correctly loaded
+    wchar_t const *const *loaded_paths = gcmz_config_get_save_paths(config2);
+    size_t const loaded_count = OV_ARRAY_LENGTH(loaded_paths);
+
+    TEST_CHECK(loaded_count == num_paths);
+    TEST_MSG("Expected %zu paths, got %zu", num_paths, loaded_count);
+
+    for (size_t i = 0; i < num_paths && i < loaded_count; ++i) {
+      TEST_CHECK(STRCMP(loaded_paths[i], test_paths[i]) == 0);
+      TEST_MSG("Path %zu mismatch:", i);
+      TEST_MSG("  Expected: %ls", test_paths[i]);
+      TEST_MSG("  Actual  : %ls", loaded_paths[i]);
+    }
+  }
+
+cleanup:
+  gcmz_config_destroy(&config1);
+  gcmz_config_destroy(&config2);
+}
+
 static void test_config_error_handling(void) {
   struct gcmz_config *config = NULL;
   enum gcmz_processing_mode mode;
@@ -484,6 +543,7 @@ TEST_LIST = {
     {"config_expand_vars_multiple_occurrences", test_config_expand_vars_multiple_occurrences},
     {"config_expand_vars_no_variables", test_config_expand_vars_no_variables},
     {"config_expand_vars_undefined_variables", test_config_expand_vars_undefined_variables},
+    {"config_save_load_multiple_paths", test_config_save_load_multiple_paths},
     {"config_error_handling", test_config_error_handling},
     {NULL, NULL},
 };
