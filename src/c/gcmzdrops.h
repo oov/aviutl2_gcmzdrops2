@@ -52,6 +52,14 @@ void gcmzdrops_show_config_dialog(struct gcmzdrops *const ctx, void *const hwnd,
 void gcmzdrops_on_project_load(struct gcmzdrops *const ctx, struct aviutl2_project_file *const project);
 
 /**
+ * @brief Handle project save event
+ *
+ * @param ctx Plugin context
+ * @param project Project file interface
+ */
+void gcmzdrops_on_project_save(struct gcmzdrops *const ctx, struct aviutl2_project_file *const project);
+
+/**
  * @brief Paste from clipboard
  *
  * @param ctx Plugin context

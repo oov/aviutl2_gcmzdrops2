@@ -2161,21 +2161,31 @@ void gcmzdrops_destroy(struct gcmzdrops **const ctx) {
   OV_FREE(ctx);
 }
 
-void gcmzdrops_on_project_load(struct gcmzdrops *const ctx, struct aviutl2_project_file *const project) {
-  if (!ctx) {
-    return;
+/**
+ * @brief Update project path tracking
+ *
+ * @param ctx Plugin context
+ * @param project_path Path to project file (may be NULL or empty)
+ * @param err [out] Error information on failure
+ * @return true on success, false on failure
+ */
+static bool
+handle_project_path_update(struct gcmzdrops *const ctx, wchar_t const *const project_path, struct ov_error *const err) {
+  if (!ctx || !err) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
   }
-  struct ov_error err = {0};
+
   bool success = false;
-  wchar_t const *const project_path = project ? project->get_project_file_path() : NULL;
   size_t const path_len = project_path ? wcslen(project_path) : 0;
+
   if (!path_len) {
     if (ctx->project_path) {
       ctx->project_path[0] = L'\0';
     }
   } else {
     if (!OV_ARRAY_GROW(&ctx->project_path, path_len + 1)) {
-      OV_ERROR_SET_GENERIC(&err, ov_error_generic_out_of_memory);
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
       goto cleanup;
     }
     wcscpy(ctx->project_path, project_path);
@@ -2191,9 +2201,31 @@ void gcmzdrops_on_project_load(struct gcmzdrops *const ctx, struct aviutl2_proje
   mtx_unlock(&ctx->init_mtx);
 
   success = true;
+
 cleanup:
-  if (!success) {
+  return success;
+}
+
+void gcmzdrops_on_project_load(struct gcmzdrops *const ctx, struct aviutl2_project_file *const project) {
+  if (!ctx) {
+    return;
+  }
+  struct ov_error err = {0};
+  wchar_t const *const project_path = project ? project->get_project_file_path() : NULL;
+  if (!handle_project_path_update(ctx, project_path, &err)) {
     gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to handle project load"));
+    OV_ERROR_DESTROY(&err);
+  }
+}
+
+void gcmzdrops_on_project_save(struct gcmzdrops *const ctx, struct aviutl2_project_file *const project) {
+  if (!ctx) {
+    return;
+  }
+  struct ov_error err = {0};
+  wchar_t const *const project_path = project ? project->get_project_file_path() : NULL;
+  if (!handle_project_path_update(ctx, project_path, &err)) {
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to handle project save"));
     OV_ERROR_DESTROY(&err);
   }
 }

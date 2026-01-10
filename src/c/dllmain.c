@@ -185,6 +185,10 @@ static void project_load_handler(struct aviutl2_project_file *project) {
   gcmzdrops_on_project_load(g_gcmzdrops, project);
 }
 
+static void project_save_handler(struct aviutl2_project_file *project) {
+  gcmzdrops_on_project_save(g_gcmzdrops, project);
+}
+
 static void paste_from_clipboard_handler(struct aviutl2_edit_section *edit) {
   gcmzdrops_paste_from_clipboard(g_gcmzdrops, edit);
 }
@@ -213,6 +217,7 @@ void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
   host->register_config_menu(config_menu_name, config_menu_handler);
 
   host->register_project_load_handler(project_load_handler);
+  host->register_project_save_handler(project_save_handler);
 
   gcmzdrops_register(g_gcmzdrops, host);
 }
