@@ -302,6 +302,9 @@ msgstr "外部API设置获取失败"
 msgid "failed to handle project load"
 msgstr "工程加载处理失败"
 
+msgid "failed to handle project save"
+msgstr "工程保存处理失败"
+
 msgid "failed to initialize external API"
 msgstr "外部API初始化失败"
 

@@ -302,6 +302,9 @@ msgstr "外部連携APIの設定を取得できませんでした"
 msgid "failed to handle project load"
 msgstr "プロジェクトの読み込み処理に失敗しました"
 
+msgid "failed to handle project save"
+msgstr "プロジェクトの保存処理に失敗しました"
+
 msgid "failed to initialize external API"
 msgstr "外部連携APIの初期化に失敗しました"
 
