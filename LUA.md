@@ -61,11 +61,34 @@
 
 ## 概要
 
-ハンドラースクリプトは、AviUtl ExEdit2 のタイムラインにファイルをドロップしたときの処理をカスタマイズするための Lua スクリプトです。
-
-ハンドラースクリプトは GCMZDrops のプラグインファイルである GCMZDrops.aux2 と同じ場所にある `GCMZScript` フォルダー内に `*.lua` ファイルとして配置することで AviUtl ExEdit2 の起動時に読み込まれます。
-
+ハンドラースクリプトは、AviUtl ExEdit2 のタイムラインにファイルをドロップしたときの処理をカスタマイズするための Lua スクリプトです。  
 各スクリプトはドラッグ＆ドロップ操作のライフサイクルに対応するフック関数を実装できます。
+
+## インストール方法
+
+ハンドラースクリプトは、以下の2種類の方法でインストールできます。
+
+### 1. GCMZScript フォルダーにスクリプトファイルを配置する
+
+GCMZDrops のプラグインファイルである GCMZDrops.aux2 と同じ場所にある `GCMZScript` フォルダー内に `*.lua` ファイルとして配置することで AviUtl ExEdit2 の起動時に読み込まれます。
+
+### 2. GCMZDrops.aux2 がエクスポートしている関数を呼び出す
+
+GCMZDrops.aux2 は以下の関数をエクスポートしています。
+
+```c
+// GCMZDrops のバージョンを取得
+DWORD GetVersion(void);
+// ハンドラースクリプトを追加
+bool AddHandlerScript(char const *script, size_t script_len);
+// ハンドラースクリプトファイルを追加
+bool AddHandlerScriptFile(wchar_t const *filepath);
+// スクリプトモジュールを登録（AviUtl ExEdit2 SDK互換）
+bool RegisterScriptModule(struct SCRIPT_MODULE_TABLE *const table, char const *module_name);
+```
+
+もしあなたが AviUtl ExEdit2 のプラグイン開発者であれば、これらの関数を使用して動的にハンドラースクリプトを登録することができます。  
+スクリプトモジュールを登録すれば、スクリプトとプログラムの連携も容易になるはずです。
 
 ## 基本構造
 
