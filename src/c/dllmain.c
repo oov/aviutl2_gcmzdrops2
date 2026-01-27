@@ -296,16 +296,15 @@ cleanup:
   return result;
 }
 
-bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table,
-                                                char const *const module_name);
-bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table,
-                                                char const *const module_name) {
-  if (!table || !module_name) {
+bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table);
+bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_table *const table) {
+  if (!table) {
     return false;
   }
 
   struct ov_error err = {0};
   char *module_path_utf8 = NULL;
+  char *module_name = NULL;
   bool result = false;
 
   {
@@ -314,6 +313,27 @@ bool __declspec(dllexport) RegisterScriptModule(struct aviutl2_script_module_tab
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
     }
+
+    // Extract module name from file path (filename without extension)
+    char const *last_sep = strrchr(module_path_utf8, '/');
+    char const *last_sep_bs = strrchr(module_path_utf8, '\\');
+    if (last_sep_bs && (!last_sep || last_sep_bs > last_sep)) {
+      last_sep = last_sep_bs;
+    }
+    char const *filename = last_sep ? last_sep + 1 : module_path_utf8;
+    char const *ext = strrchr(filename, '.');
+    size_t const name_len = ext ? (size_t)(ext - filename) : strlen(filename);
+
+    if (name_len == 0) {
+      OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to extract module name from path");
+      goto cleanup;
+    }
+    if (!OV_ARRAY_GROW(&module_name, name_len + 1)) {
+      OV_ERROR_SET_GENERIC(&err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+    memcpy(module_name, filename, name_len);
+    module_name[name_len] = '\0';
   }
   {
     struct gcmz_lua_context *const lua = get_lua(&err);
@@ -334,9 +354,12 @@ cleanup:
     gcmz_logf_warn(&err,
                    "%1$hs",
                    gettext("failed to register script module %1$hs from %2$hs"),
-                   module_name,
+                   module_name ? module_name : "<unknown>",
                    module_path_utf8 ? module_path_utf8 : "<unknown>");
     OV_ERROR_DESTROY(&err);
+  }
+  if (module_name) {
+    OV_ARRAY_DESTROY(&module_name);
   }
   if (module_path_utf8) {
     OV_ARRAY_DESTROY(&module_path_utf8);

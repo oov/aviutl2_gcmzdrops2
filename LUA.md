@@ -84,7 +84,7 @@ bool AddHandlerScript(char const *script, size_t script_len);
 // ハンドラースクリプトファイルを追加
 bool AddHandlerScriptFile(wchar_t const *filepath);
 // スクリプトモジュールを登録（AviUtl ExEdit2 SDK互換）
-bool RegisterScriptModule(struct SCRIPT_MODULE_TABLE *const table, char const *module_name);
+bool RegisterScriptModule(struct SCRIPT_MODULE_TABLE *const table);
 ```
 
 もしあなたが AviUtl ExEdit2 のプラグイン開発者であれば、これらの関数を使用して動的にハンドラースクリプトを登録することができます。  
