@@ -1950,13 +1950,13 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
   }
 
   // Check minimum required AviUtl ExEdit2 version
-  if (version < 2002600) {
+  if (version < 2003001) {
     OV_ERROR_SETF(err,
                   ov_error_type_generic,
                   ov_error_generic_fail,
                   "%1$s",
                   gettext("GCMZDrops requires AviUtl ExEdit2 %1$s or later."),
-                  "version2.0beta26");
+                  "version2.0beta30a");
     return false;
   }
 

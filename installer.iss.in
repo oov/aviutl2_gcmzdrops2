@@ -69,16 +69,13 @@ chinesesimplified.AviUtl2NotFound=未找到 aviutl2.exe。请选择 aviutl2.exe�
 chinesesimplified.PortableInstallLocation=安装位置: %1
 
 [Files]
-Source: "@GCMZ_BUILD_OUTPUT_DIR@\Plugin\GCMZDrops.aux2"; DestDir: "{app}"; Flags: ignoreversion
-Source: "@GCMZ_BUILD_OUTPUT_DIR@\Plugin\GCMZScript\*"; DestDir: "{app}\GCMZScript"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "@GCMZ_BUILD_OUTPUT_DIR@\Plugin\GCMZDrops\*"; DestDir: "{app}\GCMZDrops"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; [InstallDelete]
-; Files or directories to remove during installation (e.g., when upgrading from older versions)
-; This section runs BEFORE files are installed, so it's safe to use for cleanup.
-; Examples:
-; Type: files; Name: "{app}\deprecated_file.lua"
-; Type: files; Name: "{app}\GCMZScript\old_script.lua"
-; Type: filesandordirs; Name: "{app}\OldFolder"
+[InstallDelete]
+; Remove old installation files after migration (migration happens in CurStepChanged)
+Type: files; Name: "{app}\GCMZDrops.aux2"
+Type: files; Name: "{app}\GCMZDrops.json"
+Type: filesandordirs; Name: "{app}\GCMZScript"
 
 [Code]
 var
@@ -260,5 +257,38 @@ begin
       end;
       WizardForm.DirEdit.Text := PortableInstallDir;
     end;
+  end;
+end;
+
+procedure MigrateOldInstallation;
+var
+  OldConfigFile, NewConfigFile: String;
+  OldScriptDir, NewScriptDir: String;
+begin
+  OldConfigFile := ExpandConstant('{app}\GCMZDrops.json');
+  NewConfigFile := ExpandConstant('{app}\GCMZDrops\GCMZDrops.json');
+  OldScriptDir := ExpandConstant('{app}\GCMZScript');
+  NewScriptDir := ExpandConstant('{app}\GCMZDrops\GCMZScript');
+
+  // Migrate config file if old exists and new doesn't
+  if FileExists(OldConfigFile) and (not FileExists(NewConfigFile)) then
+  begin
+    ForceDirectories(ExtractFileDir(NewConfigFile));
+    RenameFile(OldConfigFile, NewConfigFile);
+  end;
+
+  // Migrate script directory if old exists and new doesn't
+  if DirExists(OldScriptDir) and (not DirExists(NewScriptDir)) then
+  begin
+    RenameFile(OldScriptDir, NewScriptDir);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    // Perform migration before InstallDelete runs
+    MigrateOldInstallation;
   end;
 end;

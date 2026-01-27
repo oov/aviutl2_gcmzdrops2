@@ -44,13 +44,13 @@ jobs:
         id: attest-zip
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "build/Release/dist/gcmzdrops_*.zip"
+          subject-path: "build/Release/dist/gcmzdrops_*.au2pkg.zip"
       - name: Prepare attestation for upload
         shell: bash
         run: |
           VERSION="${{ steps.get_version.outputs.tag }}"
           mkdir -p attestations
-          cp "${{ steps.attest-zip.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl"
+          cp "${{ steps.attest-zip.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}.au2pkg.zip.attestation.jsonl"
       - name: Upload attestation for zip
         uses: actions/upload-artifact@v4
         with:
@@ -107,7 +107,7 @@ jobs:
             --draft \
             --title "${VERSION}" \
             --notes-file release_notes.md \
-            "build/Release/dist/gcmzdrops_${VERSION}.zip" \
+            "build/Release/dist/gcmzdrops_${VERSION}.au2pkg.zip" \
             "build/Release/dist/gcmzdrops_${VERSION}_setup.exe" \
-            "attestations/gcmzdrops_${VERSION}.zip.attestation.jsonl" \
+            "attestations/gcmzdrops_${VERSION}.au2pkg.zip.attestation.jsonl" \
             "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"

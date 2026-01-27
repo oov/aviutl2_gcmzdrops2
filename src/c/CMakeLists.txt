@@ -218,11 +218,12 @@ add_library(gcmzdrops SHARED
 set_property(SOURCE gcmzdrops.rc APPEND PROPERTY OBJECT_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/gcmzdrops.manifest
 )
+set(GCMZ_PLUGIN_DIR "${EXPORT_DIR}/Plugin/GCMZDrops")
 set_target_properties(gcmzdrops PROPERTIES
   OUTPUT_NAME "GCMZDrops.aux2"
   PREFIX ""
   SUFFIX ""
-  RUNTIME_OUTPUT_DIRECTORY "${EXPORT_DIR}/Plugin"
+  RUNTIME_OUTPUT_DIRECTORY "${GCMZ_PLUGIN_DIR}"
 )
 add_dependencies(gcmzdrops ${PROJECT_NAME}_generate_i18n_rc ${PROJECT_NAME}_generate_version_h)
 target_link_libraries(gcmzdrops PRIVATE
@@ -237,7 +238,7 @@ target_link_libraries(gcmzdrops PRIVATE
   uxtheme
 )
 
-set(GCMZ_SCRIPT_DIR "${EXPORT_DIR}/Plugin/${GCMZ_SCRIPT_SUBDIR}")
+set(GCMZ_SCRIPT_DIR "${GCMZ_PLUGIN_DIR}/${GCMZ_SCRIPT_SUBDIR}")
 set(LUA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lua")
 add_custom_command(TARGET gcmzdrops POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "${GCMZ_SCRIPT_DIR}"
@@ -245,7 +246,7 @@ add_custom_command(TARGET gcmzdrops POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/entrypoint.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/ini.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/json.lua" "${GCMZ_SCRIPT_DIR}/"
-  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/README.md" "${EXPORT_DIR}/GCMZDrops.txt"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/README.md" "${GCMZ_PLUGIN_DIR}/GCMZDrops.txt"
 )
 
 add_executable(test_ini_reader ini_reader_test.c ini_reader.c)
