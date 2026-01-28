@@ -242,11 +242,15 @@ char const *gcmz_lua_get_script_modules_key(void);
  * @brief Callback function type for enumerating script modules
  *
  * @param name Module name (UTF-8)
+ * @param information Module information string (UTF-8), may be NULL or empty
  * @param source Source path where the module was registered from (UTF-8)
  * @param userdata User-defined context
  * @return true to continue enumeration, false to stop
  */
-typedef bool (*gcmz_lua_script_module_enum_callback)(char const *name, char const *source, void *userdata);
+typedef bool (*gcmz_lua_script_module_enum_callback)(char const *name,
+                                                     char const *information,
+                                                     char const *source,
+                                                     void *userdata);
 
 /**
  * @brief Enumerate all registered script modules

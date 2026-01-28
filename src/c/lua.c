@@ -1294,6 +1294,31 @@ bool gcmz_lua_register_script_module(struct gcmz_lua_context *const ctx,
     lua_setfield(L, -2, "source");
     // Stack: [modules_table, wrapper_table]
 
+    // Store information in wrapper_table.information (convert from wchar_t to UTF-8)
+    if (table->information && table->information[0]) {
+      size_t const info_wlen = wcslen(table->information);
+      size_t const info_utf8_len = ov_wchar_to_utf8_len(table->information, info_wlen);
+      if (info_utf8_len > 0) {
+        char info_stack[256];
+        char *info_utf8 = info_stack;
+        char *info_heap = NULL;
+        if (info_utf8_len >= sizeof(info_stack)) {
+          if (OV_ARRAY_GROW(&info_heap, info_utf8_len + 1)) {
+            info_utf8 = info_heap;
+          }
+        }
+        if (info_utf8) {
+          ov_wchar_to_utf8(table->information, info_wlen, info_utf8, info_utf8_len + 1, NULL);
+          lua_pushstring(L, info_utf8);
+          lua_setfield(L, -2, "information");
+        }
+        if (info_heap) {
+          OV_ARRAY_DESTROY(&info_heap);
+        }
+      }
+    }
+    // Stack: [modules_table, wrapper_table]
+
     // Store wrapper in the registry table
     lua_setfield(L, -2, module_name);
     // Stack: [modules_table]
@@ -1342,17 +1367,24 @@ NODISCARD bool gcmz_lua_enum_script_modules(struct gcmz_lua_context const *const
       // Stack: [modules_table, key, wrapper_table]
       char const *name = lua_isstring(L, -2) ? lua_tostring(L, -2) : "";
 
-      // Get source from wrapper_table
+      // Get source and information from wrapper_table
       char const *source = "";
+      char const *information = NULL;
       if (lua_istable(L, -1)) {
         lua_getfield(L, -1, "source");
         if (lua_isstring(L, -1)) {
           source = lua_tostring(L, -1);
         }
         lua_pop(L, 1); // Pop source
+
+        lua_getfield(L, -1, "information");
+        if (lua_isstring(L, -1)) {
+          information = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1); // Pop information
       }
 
-      if (!callback(name, source, userdata)) {
+      if (!callback(name, information, source, userdata)) {
         lua_pop(L, 2); // Pop value and key
         break;
       }

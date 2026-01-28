@@ -597,7 +597,7 @@ static bool handler_collect_callback(char const *name, int priority, char const 
   return true;
 }
 
-static bool module_collect_callback(char const *name, char const *source, void *userdata) {
+static bool module_collect_callback(char const *name, char const *information, char const *source, void *userdata) {
   struct script_enum_context *ctx = (struct script_enum_context *)userdata;
   if (!ctx) {
     return false;
@@ -614,7 +614,9 @@ static bool module_collect_callback(char const *name, char const *source, void *
   struct script_entry *entry = &ctx->entries[ctx->count];
   entry->type = script_type_module;
   entry->priority = 0; // Script modules have no priority
-  strncpy(entry->name, name ? name : "", sizeof(entry->name) - 1);
+  // Use information if available, otherwise fall back to name
+  char const *display_name = (information && information[0]) ? information : name;
+  strncpy(entry->name, display_name ? display_name : "", sizeof(entry->name) - 1);
   entry->name[sizeof(entry->name) - 1] = '\0';
   strncpy(entry->source, source ? source : "", sizeof(entry->source) - 1);
   entry->source[sizeof(entry->source) - 1] = '\0';

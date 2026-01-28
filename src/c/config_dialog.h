@@ -33,11 +33,15 @@ typedef bool (*gcmz_config_dialog_enum_handlers_fn)(void *callback_context,
  * @brief Callback function for enumerating script modules
  *
  * @param name Script module name
+ * @param information Module information string (may be NULL or empty)
  * @param source Source path of the script module
  * @param userdata User-provided context pointer
  * @return true to continue enumeration, false to stop
  */
-typedef bool (*gcmz_config_dialog_script_module_enum_fn)(char const *name, char const *source, void *userdata);
+typedef bool (*gcmz_config_dialog_script_module_enum_fn)(char const *name,
+                                                         char const *information,
+                                                         char const *source,
+                                                         void *userdata);
 
 /**
  * @brief Callback function to enumerate script modules via injection
