@@ -141,7 +141,6 @@ struct gcmzdrops {
   struct gcmz_do_sub *do_sub;
 
   struct aviutl2_edit_handle *edit;
-  struct aviutl2_edit_section *current_edit_section; ///< Current edit section when in Lua callback (deadlock avoidance)
   uint32_t aviutl2_version;
   wchar_t *project_path;
 
@@ -243,20 +242,6 @@ cleanup:
   gcmz_ini_reader_destroy(&reader);
   return result;
 }
-
-/**
- * @brief Context for external API drop completion callback
- */
-struct external_api_drop_context {
-  struct gcmzdrops *ctx;                           ///< Parent context
-  struct aviutl2_edit_section *edit;               ///< Edit section (valid during callback)
-  int layer;                                       ///< Target layer (0-based)
-  int frame;                                       ///< Target frame position
-  int frame_advance;                               ///< Frame advance after drop
-  int margin;                                      ///< Margin parameter for collision handling (-1 = disabled)
-  gcmz_api_request_complete_func request_complete; ///< Callback to signal request completion
-  struct gcmz_api_request_params *request_params;  ///< Original request params for completion callback
-};
 
 /**
  * @brief Context for clipboard paste completion callback
@@ -558,45 +543,67 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
 }
 
 /**
- * @brief Completion callback for external API drop operations
- *
- * Called after Lua processing completes. Receives the processed file list
- * and handles insertion via official API using stored edit section.
+ * @brief Context for request_api edit info retrieval
  */
-static void on_drop_completion(struct gcmz_file_list const *const file_list, void *const userdata) {
-  if (!file_list) {
+struct request_api_info_context {
+  int layer;               ///< [in/out] Target layer (converted to 0-based)
+  int frame;               ///< [out] Current frame position
+  int display_layer_start; ///< [out] Display layer start
+  int selected_layer;      ///< [out] Currently selected layer (0-based)
+};
+
+/**
+ * @brief Edit section callback for retrieving edit info only
+ */
+static void request_api_get_info_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct request_api_info_context *const info_ctx = (struct request_api_info_context *)param;
+  if (!info_ctx || !edit || !edit->info) {
     return;
   }
-  gcmz_logf_verbose(NULL, NULL, "on_drop_completion called");
+  info_ctx->frame = edit->info->frame;
+  info_ctx->display_layer_start = edit->info->display_layer_start;
+  info_ctx->selected_layer = edit->info->layer;
+}
 
-  struct external_api_drop_context *api_ctx = (struct external_api_drop_context *)userdata;
-  if (!api_ctx || !api_ctx->ctx || !api_ctx->edit) {
+/**
+ * @brief Context for request_api file insertion
+ */
+struct request_api_insert_context {
+  struct gcmzdrops *ctx;
+  struct gcmz_file_list const *file_list;
+  int layer;
+  int frame;
+  int frame_advance;
+  int margin;
+};
+
+/**
+ * @brief Edit section callback for file insertion only
+ */
+static void request_api_insert_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct request_api_insert_context *const insert_ctx = (struct request_api_insert_context *)param;
+  if (!insert_ctx || !insert_ctx->file_list || !edit) {
     return;
   }
 
-  struct aviutl2_edit_section *const edit = api_ctx->edit;
-  int const layer = api_ctx->layer;
-  int frame = api_ctx->frame;
+  int const layer = insert_ctx->layer;
+  int frame = insert_ctx->frame;
 
   gcmz_logf_verbose(NULL, "%1$d%2$d", "external API drop target: layer %1$d, frame %2$d", layer, frame);
 
   // Check for collision at insertion position and adjust if needed
-  if (api_ctx->margin >= 0 && layer >= 0 && edit->find_object && edit->get_object_layer_frame) {
-    // `layer` is 0-based for find_object
+  if (insert_ctx->margin >= 0 && layer >= 0 && edit->find_object && edit->get_object_layer_frame) {
     int const target_layer = layer;
     aviutl2_object_handle obj = edit->find_object(target_layer, frame);
     if (obj) {
       struct aviutl2_object_layer_frame olf = edit->get_object_layer_frame(obj);
       if (frame >= olf.start && frame <= olf.end) {
-        // Collision detected - try to adjust
-        int const new_frame = olf.end + 1 + api_ctx->margin;
+        int const new_frame = olf.end + 1 + insert_ctx->margin;
 
-        // Check if the new position also has a collision
         aviutl2_object_handle next_obj = edit->find_object(target_layer, new_frame);
         if (next_obj) {
           struct aviutl2_object_layer_frame next_olf = edit->get_object_layer_frame(next_obj);
           if (new_frame >= next_olf.start && new_frame <= next_olf.end) {
-            // Still collision after adjustment - cannot solve
             gcmz_logf_error(NULL,
                             "%1$hs",
                             "%1$hs",
@@ -613,81 +620,39 @@ static void on_drop_completion(struct gcmz_file_list const *const file_list, voi
   }
 
   struct ov_error err = {0};
-  aviutl2_object_handle const obj = insert_files_to_timeline(file_list, edit, layer, frame, &err);
+  aviutl2_object_handle const obj = insert_files_to_timeline(insert_ctx->file_list, edit, layer, frame, &err);
   if (!obj) {
-    gcmz_logf_error(NULL, "%1$hs", "%1$hs", gettext("failed to insert files into timeline"));
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to insert files into timeline"));
+    OV_ERROR_DESTROY(&err);
     return;
   }
   edit->set_focus_object(obj);
-  if (api_ctx->frame_advance != 0) {
-    int const move_to = frame + api_ctx->frame_advance;
+  if (insert_ctx->frame_advance != 0) {
+    int const move_to = frame + insert_ctx->frame_advance;
     edit->set_cursor_layer_frame(layer - 1, move_to);
   }
 }
 
 /**
- * @brief Context for request_api edit section callback
+ * @brief Completion callback for external API drop operations (used during Lua processing phase)
+ *
+ * This callback stores the processed file list for later insertion.
+ * Actual insertion happens in a separate edit_section call.
  */
-struct request_api_context {
-  struct gcmzdrops *ctx;
-  struct gcmz_api_request_params *params;
-  gcmz_api_request_complete_func complete;
+struct request_api_lua_result {
+  struct gcmz_file_list const *processed_files; ///< Processed file list (pointer to callback argument, valid during
+                                                ///< gcmz_drop_simulate_drop call)
+  bool has_files;                               ///< Whether files were processed
 };
 
-/**
- * @brief Edit section callback for request_api
- *
- * Performs Lua processing and file insertion within a single EDIT_SECTION.
- */
-static void request_api_edit_section(void *param, struct aviutl2_edit_section *edit) {
-  struct request_api_context *const rac = (struct request_api_context *)param;
-  if (!rac || !rac->ctx || !rac->params || !edit) {
+static void on_request_api_lua_complete(struct gcmz_file_list const *const file_list, void *const userdata) {
+  struct request_api_lua_result *const result = (struct request_api_lua_result *)userdata;
+  if (!result) {
     return;
   }
-
-  struct gcmzdrops *const ctx = rac->ctx;
-  struct gcmz_api_request_params *const params = rac->params;
-  struct ov_error err = {0};
-
-  int layer = params->layer;
-  int frame = edit->info->frame;
-
-  // Handle layer value:
-  // - layer < 0: relative to display_layer_start (e.g., -1 = first visible layer)
-  // - layer = 0: use currently selected layer
-  // - layer > 0: absolute layer number (1-based input)
-  if (layer < 0) {
-    // Convert negative (relative) layer to absolute 0-based layer
-    layer = edit->info->display_layer_start + (-layer) - 1;
-  } else if (layer == 0) {
-    layer = edit->info->layer; // edit->info->layer is already 0-based
-  } else {
-    layer = layer - 1; // convert to 0-based
-  }
-
-  ctx->current_edit_section = edit;
-  bool const r = gcmz_drop_simulate_drop(ctx->drop,
-                                         params->files,
-                                         params->use_exo_converter,
-                                         on_drop_completion,
-                                         &(struct external_api_drop_context){
-                                             .ctx = ctx,
-                                             .edit = edit,
-                                             .layer = layer,
-                                             .frame = frame,
-                                             .frame_advance = params->frame_advance,
-                                             .margin = params->margin,
-                                             .request_complete = rac->complete,
-                                             .request_params = params,
-                                         },
-                                         &err);
-  ctx->current_edit_section = NULL;
-
-  if (!r) {
-    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "simulated drop failed");
-    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to drop from external API request"));
-    OV_ERROR_DESTROY(&err);
-    return;
+  if (file_list && gcmz_file_list_count(file_list) > 0) {
+    result->processed_files = file_list;
+    result->has_files = true;
   }
 }
 
@@ -704,13 +669,59 @@ static void request_api(struct gcmz_api_request_params *const params, gcmz_api_r
     complete(params);
     return;
   }
-  ctx->edit->call_edit_section_param(
-      &(struct request_api_context){
-          .ctx = ctx,
-          .params = params,
-          .complete = complete,
-      },
-      request_api_edit_section);
+
+  // Phase 1: Get edit info (short edit_section)
+  struct request_api_info_context info_ctx = {
+      .layer = params->layer,
+      .frame = 0,
+      .display_layer_start = 0,
+      .selected_layer = 0,
+  };
+  ctx->edit->call_edit_section_param(&info_ctx, request_api_get_info_edit_section);
+
+  // Calculate actual layer (0-based)
+  int layer = info_ctx.layer;
+  if (layer < 0) {
+    layer = info_ctx.display_layer_start + (-layer) - 1;
+  } else if (layer == 0) {
+    layer = info_ctx.selected_layer;
+  } else {
+    layer = layer - 1;
+  }
+
+  // Phase 2: Lua processing (outside edit_section)
+  struct request_api_lua_result lua_result = {
+      .processed_files = NULL,
+      .has_files = false,
+  };
+
+  struct ov_error err = {0};
+  bool const r = gcmz_drop_simulate_drop(
+      ctx->drop, params->files, params->use_exo_converter, on_request_api_lua_complete, &lua_result, &err);
+  if (!r) {
+    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "simulated drop failed");
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to drop from external API request"));
+    OV_ERROR_DESTROY(&err);
+    complete(params);
+    return;
+  }
+
+  if (!lua_result.has_files || !lua_result.processed_files) {
+    complete(params);
+    return;
+  }
+
+  // Phase 3: File insertion (short edit_section)
+  struct request_api_insert_context insert_ctx = {
+      .ctx = ctx,
+      .file_list = lua_result.processed_files,
+      .layer = layer,
+      .frame = info_ctx.frame,
+      .frame_advance = params->frame_advance,
+      .margin = params->margin,
+  };
+  ctx->edit->call_edit_section_param(&insert_ctx, request_api_insert_edit_section);
+
   complete(params);
 }
 
@@ -1255,9 +1266,7 @@ static bool get_project_data_utf8(struct aviutl2_edit_info *edit_info,
     OV_ERROR_SET_GENERIC(err, ov_error_generic_unexpected);
     return false;
   }
-  if (ctx->current_edit_section) {
-    memcpy(edit_info, ctx->current_edit_section->info, sizeof(*edit_info));
-  } else if (ctx->edit) {
+  if (ctx->edit) {
     ctx->edit->get_edit_info(edit_info, sizeof(*edit_info));
   } else {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
@@ -1344,37 +1353,6 @@ static bool lua_drag_enter_adapter(struct gcmz_file_list *file_list,
   return gcmz_lua_call_drag_enter(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
 }
 
-/**
- * @brief Context for lua_drop_adapter_edit_section callback
- */
-struct lua_drop_adapter_context {
-  struct gcmzdrops *ctx;
-  struct gcmz_file_list *file_list;
-  uint32_t key_state;
-  uint32_t modifier_keys;
-  bool from_api;
-  struct ov_error *err;
-  bool result;
-};
-
-/**
- * @brief Edit section callback for lua_drop_adapter
- *
- * Sets current_edit_section and calls gcmz_lua_call_drop within the edit section.
- */
-static void lua_drop_adapter_edit_section(void *param, struct aviutl2_edit_section *edit) {
-  struct lua_drop_adapter_context *const ldc = (struct lua_drop_adapter_context *)param;
-  if (!ldc || !ldc->ctx || !edit) {
-    return;
-  }
-
-  struct gcmzdrops *const ctx = ldc->ctx;
-  ctx->current_edit_section = edit;
-  ldc->result =
-      gcmz_lua_call_drop(ctx->lua_ctx, ldc->file_list, ldc->key_state, ldc->modifier_keys, ldc->from_api, ldc->err);
-  ctx->current_edit_section = NULL;
-}
-
 static bool lua_drop_adapter(struct gcmz_file_list *file_list,
                              uint32_t key_state,
                              uint32_t modifier_keys,
@@ -1387,28 +1365,9 @@ static bool lua_drop_adapter(struct gcmz_file_list *file_list,
     return false;
   }
 
-  // If already in an edit section (e.g., called from gcmz_drop_simulate_drop), call directly
-  if (ctx->current_edit_section) {
-    return gcmz_lua_call_drop(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
-  }
-
-  // Otherwise, enter edit section for Lua processing
-  if (!ctx->edit || !ctx->edit->call_edit_section_param) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_fail);
-    return false;
-  }
-
-  struct lua_drop_adapter_context ldc = {
-      .ctx = ctx,
-      .file_list = file_list,
-      .key_state = key_state,
-      .modifier_keys = modifier_keys,
-      .from_api = from_api,
-      .err = err,
-      .result = false,
-  };
-  ctx->edit->call_edit_section_param(&ldc, lua_drop_adapter_edit_section);
-  return ldc.result;
+  // Lua processing runs outside edit_section.
+  // get_media_info calls within Lua will enter edit_section temporarily if needed.
+  return gcmz_lua_call_drop(ctx->lua_ctx, file_list, key_state, modifier_keys, from_api, err);
 }
 
 static bool lua_drag_leave_adapter(void *userdata, struct ov_error *const err) {
@@ -1802,6 +1761,28 @@ cleanup:
   return NULL;
 }
 
+/**
+ * @brief Context for get_media_info edit_section callback
+ */
+struct get_media_info_context {
+  wchar_t const *filepath_w;       ///< Input: file path (wchar_t)
+  struct aviutl2_media_info *info; ///< Output: media info
+  bool result;                     ///< Result flag
+};
+
+/**
+ * @brief Edit section callback for get_media_info
+ *
+ * Calls edit->get_media_info within the edit section.
+ */
+static void get_media_info_edit_section(void *param, struct aviutl2_edit_section *edit) {
+  struct get_media_info_context *const gmc = (struct get_media_info_context *)param;
+  if (!gmc || !edit || !edit->get_media_info) {
+    return;
+  }
+  gmc->result = edit->get_media_info(gmc->filepath_w, gmc->info, sizeof(*gmc->info));
+}
+
 static bool
 get_media_info_utf8(char const *filepath, struct aviutl2_media_info *info, void *userdata, struct ov_error *err) {
   struct gcmzdrops *const ctx = (struct gcmzdrops *)userdata;
@@ -1811,36 +1792,45 @@ get_media_info_utf8(char const *filepath, struct aviutl2_media_info *info, void 
   }
 
   if (!ctx) {
-    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "edit handle not available");
+    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "context not available");
     return false;
   }
-  if (!ctx->current_edit_section) {
-    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "edit section not available");
+  if (!ctx->edit || !ctx->edit->call_edit_section_param) {
+    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "edit handle not available");
     return false;
   }
 
   wchar_t *filepath_w = NULL;
   bool result = false;
 
-  int const filepath_len = MultiByteToWideChar(CP_UTF8, 0, filepath, -1, NULL, 0);
-  if (filepath_len <= 0) {
-    OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-    goto cleanup;
-  }
+  {
+    int const filepath_len = MultiByteToWideChar(CP_UTF8, 0, filepath, -1, NULL, 0);
+    if (filepath_len <= 0) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
 
-  if (!OV_ARRAY_GROW(&filepath_w, (size_t)filepath_len)) {
-    OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
-    goto cleanup;
-  }
+    if (!OV_ARRAY_GROW(&filepath_w, (size_t)filepath_len)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
 
-  if (MultiByteToWideChar(CP_UTF8, 0, filepath, -1, filepath_w, filepath_len) <= 0) {
-    OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
-    goto cleanup;
-  }
+    if (MultiByteToWideChar(CP_UTF8, 0, filepath, -1, filepath_w, filepath_len) <= 0) {
+      OV_ERROR_SET_HRESULT(err, HRESULT_FROM_WIN32(GetLastError()));
+      goto cleanup;
+    }
 
-  if (!ctx->current_edit_section->get_media_info(filepath_w, info, sizeof(*info))) {
-    OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "unsupported media file");
-    goto cleanup;
+    // Enter edit section temporarily to call get_media_info
+    struct get_media_info_context gmc = {
+        .filepath_w = filepath_w,
+        .info = info,
+        .result = false,
+    };
+    ctx->edit->call_edit_section_param(&gmc, get_media_info_edit_section);
+    if (!gmc.result) {
+      OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "unsupported media file");
+      goto cleanup;
+    }
   }
 
   result = true;
@@ -2271,7 +2261,6 @@ void gcmzdrops_paste_from_clipboard(struct gcmzdrops *const ctx, struct aviutl2_
   }
 
   {
-    ctx->current_edit_section = edit;
     bool const r = gcmz_drop_simulate_drop(ctx->drop,
                                            file_list,
                                            false,
@@ -2283,7 +2272,6 @@ void gcmzdrops_paste_from_clipboard(struct gcmzdrops *const ctx, struct aviutl2_
                                                .frame = frame,
                                            },
                                            &err);
-    ctx->current_edit_section = NULL;
     if (!r) {
       OV_ERROR_ADD_TRACE(&err);
       goto cleanup;
