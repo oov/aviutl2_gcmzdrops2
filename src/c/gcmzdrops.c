@@ -247,7 +247,6 @@ cleanup:
  * @brief Context for clipboard paste completion callback
  */
 struct clipboard_paste_context {
-  struct gcmzdrops *ctx;             ///< Parent context
   struct aviutl2_edit_section *edit; ///< Edit section (valid during callback)
   int layer;                         ///< Target layer (0-based, captured early)
   int frame;                         ///< Target frame position (captured early)
@@ -528,7 +527,7 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
     return;
   }
   struct clipboard_paste_context *paste_ctx = (struct clipboard_paste_context *)userdata;
-  if (!paste_ctx || !paste_ctx->ctx || !paste_ctx->edit) {
+  if (!paste_ctx || !paste_ctx->edit) {
     return;
   }
   struct ov_error err = {0};
@@ -546,7 +545,7 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
  * @brief Context for request_api edit info retrieval
  */
 struct request_api_info_context {
-  int layer;               ///< [in/out] Target layer (converted to 0-based)
+  int layer;               ///< [in] Original layer value from params
   int frame;               ///< [out] Current frame position
   int display_layer_start; ///< [out] Display layer start
   int selected_layer;      ///< [out] Currently selected layer (0-based)
@@ -569,7 +568,6 @@ static void request_api_get_info_edit_section(void *param, struct aviutl2_edit_s
  * @brief Context for request_api file insertion
  */
 struct request_api_insert_context {
-  struct gcmzdrops *ctx;
   struct gcmz_file_list const *file_list;
   int layer;
   int frame;
@@ -713,7 +711,6 @@ static void request_api(struct gcmz_api_request_params *const params, gcmz_api_r
 
   // Phase 3: File insertion (short edit_section)
   struct request_api_insert_context insert_ctx = {
-      .ctx = ctx,
       .file_list = lua_result.processed_files,
       .layer = layer,
       .frame = info_ctx.frame,
@@ -2266,7 +2263,6 @@ void gcmzdrops_paste_from_clipboard(struct gcmzdrops *const ctx, struct aviutl2_
                                            false,
                                            on_clipboard_paste_completion,
                                            &(struct clipboard_paste_context){
-                                               .ctx = ctx,
                                                .edit = edit,
                                                .layer = layer,
                                                .frame = frame,
