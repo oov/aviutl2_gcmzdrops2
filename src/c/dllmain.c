@@ -395,11 +395,15 @@ BOOL WINAPI DllMain(HINSTANCE const inst, DWORD const reason, LPVOID const reser
   (void)gettext_noop("†");
   (void)reserved;
   switch (reason) {
-  case DLL_PROCESS_ATTACH:
+  case DLL_PROCESS_ATTACH: {
     DisableThreadLibraryCalls(inst);
-    ov_init();
-    ov_error_set_output_hook(error_output_hook);
+    struct ov_init_options options = ov_init_get_default_options();
+    options.output_func = error_output_hook;
+    if (!ov_init(&options)) {
+      return FALSE;
+    }
     return TRUE;
+  }
   case DLL_PROCESS_DETACH:
     ov_exit();
     return TRUE;
