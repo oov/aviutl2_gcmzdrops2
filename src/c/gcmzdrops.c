@@ -72,6 +72,11 @@
 #  define GCMZ_SCRIPT_SUBDIR "GCMZScript"
 #endif
 
+static uint32_t const required_aviutl2_version = 2004400;
+static char const required_aviutl2_version_name[] = "version2.0beta44";
+
+uint32_t gcmzdrops_get_required_aviutl2_version(void) { return required_aviutl2_version; }
+
 /**
  * @brief Find all aviutl2Manager windows in the current process
  *
@@ -542,29 +547,6 @@ static void on_clipboard_paste_completion(struct gcmz_file_list const *const fil
 }
 
 /**
- * @brief Context for request_api edit info retrieval
- */
-struct request_api_info_context {
-  int layer;               ///< [in] Original layer value from params
-  int frame;               ///< [out] Current frame position
-  int display_layer_start; ///< [out] Display layer start
-  int selected_layer;      ///< [out] Currently selected layer (0-based)
-};
-
-/**
- * @brief Edit section callback for retrieving edit info only
- */
-static void request_api_get_info_edit_section(void *param, struct aviutl2_edit_section *edit) {
-  struct request_api_info_context *const info_ctx = (struct request_api_info_context *)param;
-  if (!info_ctx || !edit || !edit->info) {
-    return;
-  }
-  info_ctx->frame = edit->info->frame;
-  info_ctx->display_layer_start = edit->info->display_layer_start;
-  info_ctx->selected_layer = edit->info->layer;
-}
-
-/**
  * @brief Context for request_api file insertion
  */
 struct request_api_insert_context {
@@ -668,21 +650,16 @@ static void request_api(struct gcmz_api_request_params *const params, gcmz_api_r
     return;
   }
 
-  // Phase 1: Get edit info (short edit_section)
-  struct request_api_info_context info_ctx = {
-      .layer = params->layer,
-      .frame = 0,
-      .display_layer_start = 0,
-      .selected_layer = 0,
-  };
-  ctx->edit->call_edit_section_param(&info_ctx, request_api_get_info_edit_section);
+  // Phase 1: Get edit info using the SDK read lock.
+  struct aviutl2_edit_info edit_info = {0};
+  ctx->edit->get_edit_info(&edit_info, sizeof(edit_info));
 
   // Calculate actual layer (0-based)
-  int layer = info_ctx.layer;
+  int layer = params->layer;
   if (layer < 0) {
-    layer = info_ctx.display_layer_start + (-layer) - 1;
+    layer = edit_info.display_layer_start + (-layer) - 1;
   } else if (layer == 0) {
-    layer = info_ctx.selected_layer;
+    layer = edit_info.layer;
   } else {
     layer = layer - 1;
   }
@@ -713,7 +690,7 @@ static void request_api(struct gcmz_api_request_params *const params, gcmz_api_r
   struct request_api_insert_context insert_ctx = {
       .file_list = lua_result.processed_files,
       .layer = layer,
-      .frame = info_ctx.frame,
+      .frame = edit_info.frame,
       .frame_advance = params->frame_advance,
       .margin = params->margin,
   };
@@ -1759,7 +1736,7 @@ cleanup:
 }
 
 /**
- * @brief Context for get_media_info edit_section callback
+ * @brief Context for get_media_info read section callback
  */
 struct get_media_info_context {
   wchar_t const *filepath_w;       ///< Input: file path (wchar_t)
@@ -1768,11 +1745,11 @@ struct get_media_info_context {
 };
 
 /**
- * @brief Edit section callback for get_media_info
+ * @brief Read section callback for get_media_info
  *
- * Calls edit->get_media_info within the edit section.
+ * Calls edit->get_media_info within the read section.
  */
-static void get_media_info_edit_section(void *param, struct aviutl2_edit_section *edit) {
+static void get_media_info_read_section(void *param, struct aviutl2_edit_section *edit) {
   struct get_media_info_context *const gmc = (struct get_media_info_context *)param;
   if (!gmc || !edit || !edit->get_media_info) {
     return;
@@ -1792,7 +1769,7 @@ get_media_info_utf8(char const *filepath, struct aviutl2_media_info *info, void 
     OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "context not available");
     return false;
   }
-  if (!ctx->edit || !ctx->edit->call_edit_section_param) {
+  if (!ctx->edit || !ctx->edit->call_read_section_param) {
     OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "edit handle not available");
     return false;
   }
@@ -1817,13 +1794,13 @@ get_media_info_utf8(char const *filepath, struct aviutl2_media_info *info, void 
       goto cleanup;
     }
 
-    // Enter edit section temporarily to call get_media_info
+    // Enter read section temporarily to call get_media_info.
     struct get_media_info_context gmc = {
         .filepath_w = filepath_w,
         .info = info,
         .result = false,
     };
-    ctx->edit->call_edit_section_param(&gmc, get_media_info_edit_section);
+    ctx->edit->call_read_section_param(&gmc, get_media_info_read_section);
     if (!gmc.result) {
       OV_ERROR_SET(err, ov_error_type_generic, ov_error_generic_fail, "unsupported media file");
       goto cleanup;
@@ -1937,13 +1914,13 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
   }
 
   // Check minimum required AviUtl ExEdit2 version
-  if (version < 2003001) {
+  if (version < required_aviutl2_version) {
     OV_ERROR_SETF(err,
                   ov_error_type_generic,
                   ov_error_generic_fail,
                   "%1$s",
                   gettext("GCMZDrops requires AviUtl ExEdit2 %1$s or later."),
-                  "version2.0beta30a");
+                  required_aviutl2_version_name);
     return false;
   }
 

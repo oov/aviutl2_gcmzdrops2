@@ -9,6 +9,13 @@ struct aviutl2_edit_section;
 struct aviutl2_project_file;
 
 /**
+ * @brief Get required AviUtl ExEdit2 version number
+ *
+ * @return Required AviUtl ExEdit2 version number
+ */
+uint32_t gcmzdrops_get_required_aviutl2_version(void);
+
+/**
  * @brief Create and initialize gcmzdrops context
  *
  * @param ctx [out] Pointer to store the created context

@@ -108,6 +108,9 @@ cleanup:
 DWORD __declspec(dllexport) GetVersion(void);
 DWORD __declspec(dllexport) GetVersion(void) { return GCMZ_VERSION_UINT32; }
 
+DWORD __declspec(dllexport) RequiredVersion(void);
+DWORD __declspec(dllexport) RequiredVersion(void) { return gcmzdrops_get_required_aviutl2_version(); }
+
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger);
 void __declspec(dllexport) InitializeLogger(struct aviutl2_log_handle *logger) { gcmz_logf_set_handle(logger); }
 
