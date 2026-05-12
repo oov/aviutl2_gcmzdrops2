@@ -231,6 +231,16 @@ static void func_return_table_string(struct aviutl2_script_module_param *param) 
 }
 
 /**
+ * @brief Function that returns a table with boolean values
+ */
+static void func_return_table_boolean(struct aviutl2_script_module_param *param) {
+  (void)param;
+  char const *keys[] = {"enabled", "hidden", "locked"};
+  bool values[] = {true, false, true};
+  param->push_result_table_boolean(keys, values, 3);
+}
+
+/**
  * @brief Function that returns an array of ints
  */
 static void func_return_array_int(struct aviutl2_script_module_param *param) {
@@ -255,6 +265,15 @@ static void func_return_array_string(struct aviutl2_script_module_param *param) 
   (void)param;
   char const *values[] = {"one", "two", "three"};
   param->push_result_array_string(values, 3);
+}
+
+/**
+ * @brief Function that returns an array of booleans
+ */
+static void func_return_array_boolean(struct aviutl2_script_module_param *param) {
+  (void)param;
+  bool values[] = {true, false, true, false};
+  param->push_result_array_boolean(values, 4);
 }
 
 /**
@@ -366,9 +385,11 @@ static struct aviutl2_script_module_function g_test_functions[] = {
     {L"return_table_int", func_return_table_int},
     {L"return_table_double", func_return_table_double},
     {L"return_table_string", func_return_table_string},
+    {L"return_table_boolean", func_return_table_boolean},
     {L"return_array_int", func_return_array_int},
     {L"return_array_double", func_return_array_double},
     {L"return_array_string", func_return_array_string},
+    {L"return_array_boolean", func_return_array_boolean},
     {L"set_error", func_set_error},
     {L"edge_cases", func_edge_cases},
     {L"func_with_very_long_name_that_exceeds_sixty_four_characters_limit_for_testing_heap_allocation",
@@ -883,6 +904,32 @@ static void test_return_table_string(void) {
   gcmz_lua_destroy(&ctx);
 }
 
+static void test_return_table_boolean(void) {
+  struct gcmz_lua_context *ctx = NULL;
+  struct ov_error err = {0};
+
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
+
+  lua_State *L = gcmz_lua_get_state(ctx);
+  register_module_lookup(L);
+
+  TEST_CHECK(run_lua_code(L,
+                          "local m = get_test_module('testmod')\n"
+                          "local t = m.return_table_boolean()\n"
+                          "assert(t.enabled == true)\n"
+                          "assert(t.hidden == false)\n"
+                          "assert(t.locked == true)\n",
+                          "return table boolean"));
+
+  gcmz_lua_destroy(&ctx);
+}
+
 static void test_return_array_int(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
@@ -962,6 +1009,34 @@ static void test_return_array_string(void) {
                           "assert(arr[2] == 'two')\n"
                           "assert(arr[3] == 'three')\n",
                           "return array string"));
+
+  gcmz_lua_destroy(&ctx);
+}
+
+static void test_return_array_boolean(void) {
+  struct gcmz_lua_context *ctx = NULL;
+  struct ov_error err = {0};
+
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_lua_register_script_module(ctx, &g_test_module, "testmod", NULL, &err), &err)) {
+    gcmz_lua_destroy(&ctx);
+    return;
+  }
+
+  lua_State *L = gcmz_lua_get_state(ctx);
+  register_module_lookup(L);
+
+  TEST_CHECK(run_lua_code(L,
+                          "local m = get_test_module('testmod')\n"
+                          "local arr = m.return_array_boolean()\n"
+                          "assert(#arr == 4)\n"
+                          "assert(arr[1] == true)\n"
+                          "assert(arr[2] == false)\n"
+                          "assert(arr[3] == true)\n"
+                          "assert(arr[4] == false)\n",
+                          "return array boolean"));
 
   gcmz_lua_destroy(&ctx);
 }
@@ -1347,9 +1422,11 @@ TEST_LIST = {
     {"return_table_int", test_return_table_int},
     {"return_table_double", test_return_table_double},
     {"return_table_string", test_return_table_string},
+    {"return_table_boolean", test_return_table_boolean},
     {"return_array_int", test_return_array_int},
     {"return_array_double", test_return_array_double},
     {"return_array_string", test_return_array_string},
+    {"return_array_boolean", test_return_array_boolean},
 
     // Error handling tests
     {"error_handling", test_error_handling},

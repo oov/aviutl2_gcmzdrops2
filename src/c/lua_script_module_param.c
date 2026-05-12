@@ -264,6 +264,20 @@ static void param_push_table_string(char const **keys, char const **values, int 
   g_ctx->num_pushed++;
 }
 
+static void param_push_table_boolean(char const **keys, bool *values, int num) {
+  if (!g_ctx || !keys || !values || num <= 0) {
+    return;
+  }
+  lua_createtable(g_ctx->L, 0, num);
+  for (int i = 0; i < num; i++) {
+    if (keys[i]) {
+      lua_pushboolean(g_ctx->L, values[i] ? 1 : 0);
+      lua_setfield(g_ctx->L, -2, keys[i]);
+    }
+  }
+  g_ctx->num_pushed++;
+}
+
 static void param_push_array_int(int *values, int num) {
   if (!g_ctx || !values || num <= 0) {
     return;
@@ -299,6 +313,18 @@ static void param_push_array_string(char const **values, int num) {
     } else {
       lua_pushnil(g_ctx->L);
     }
+    lua_rawseti(g_ctx->L, -2, i + 1);
+  }
+  g_ctx->num_pushed++;
+}
+
+static void param_push_array_boolean(bool *values, int num) {
+  if (!g_ctx || !values || num <= 0) {
+    return;
+  }
+  lua_createtable(g_ctx->L, num, 0);
+  for (int i = 0; i < num; i++) {
+    lua_pushboolean(g_ctx->L, values[i] ? 1 : 0);
     lua_rawseti(g_ctx->L, -2, i + 1);
   }
   g_ctx->num_pushed++;
@@ -360,9 +386,11 @@ int script_module_param_call(lua_State *const L, void (*func)(struct aviutl2_scr
       .push_result_table_int = param_push_table_int,
       .push_result_table_double = param_push_table_double,
       .push_result_table_string = param_push_table_string,
+      .push_result_table_boolean = param_push_table_boolean,
       .push_result_array_int = param_push_array_int,
       .push_result_array_double = param_push_array_double,
       .push_result_array_string = param_push_array_string,
+      .push_result_array_boolean = param_push_array_boolean,
       .set_error = param_set_error,
   };
 

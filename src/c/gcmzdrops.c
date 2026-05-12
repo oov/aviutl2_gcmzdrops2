@@ -74,6 +74,7 @@
 
 static uint32_t const required_aviutl2_version = 2004400;
 static char const required_aviutl2_version_name[] = "version2.0beta44";
+static HWND g_host_app_window = NULL;
 
 uint32_t gcmzdrops_get_required_aviutl2_version(void) { return required_aviutl2_version; }
 
@@ -122,9 +123,8 @@ static size_t find_manager_windows(HWND *window, size_t const window_len, struct
  * @return HWND to use as owner window, or NULL if not found
  */
 static HWND get_error_dialog_owner_window(void) {
-  HWND wnd = NULL;
-  if (find_manager_windows(&wnd, 1, NULL) && wnd) {
-    return wnd;
+  if (g_host_app_window && IsWindow(g_host_app_window)) {
+    return g_host_app_window;
   }
   return NULL;
 }
@@ -147,6 +147,7 @@ struct gcmzdrops {
 
   struct aviutl2_edit_handle *edit;
   uint32_t aviutl2_version;
+  HWND host_app_window;
   wchar_t *project_path;
 
   enum gcmzdrops_plugin_state plugin_state;
@@ -1614,6 +1615,9 @@ static void finalize(void *const userdata) {
   gcmz_delayed_cleanup_exit();
   gcmz_temp_remove_directory();
   gcmz_do_exit();
+  if (g_host_app_window == ctx->host_app_window) {
+    g_host_app_window = NULL;
+  }
   gcmz_error_set_owner_window_callback(NULL);
   gcmz_do_sub_destroy(&ctx->do_sub);
   if (ctx->plugin_state != gcmzdrops_plugin_state_not_initialized) {
@@ -1949,23 +1953,6 @@ NODISCARD bool gcmzdrops_create(struct gcmzdrops **const ctx,
     }
     c->plugin_state = gcmzdrops_plugin_state_initializing;
 
-    {
-      HWND main_window = NULL;
-      if (!find_manager_windows(&main_window, 1, err)) {
-        OV_ERROR_ADD_TRACE(err);
-        goto cleanup;
-      }
-      if (!gcmz_do_init(
-              &(struct gcmz_do_init_option){
-                  .window = main_window,
-                  .on_change_activate = on_change_activate,
-                  .userdata = c,
-              },
-              err)) {
-        OV_ERROR_ADD_TRACE(err);
-        goto cleanup;
-      }
-    }
     gcmz_error_set_owner_window_callback(get_error_dialog_owner_window);
 
     c->do_sub = gcmz_do_sub_create(err);
@@ -2270,8 +2257,37 @@ void gcmzdrops_register(struct gcmzdrops *const ctx, struct aviutl2_host_app_tab
   if (!ctx || !host) {
     return;
   }
+  struct ov_error err = {0};
+  bool success = false;
   struct aviutl2_edit_handle *const edit = host->create_edit_handle();
   if (edit) {
     ctx->edit = edit;
+  }
+  if (!ctx->edit || !ctx->edit->get_host_app_window) {
+    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get AviUtl2 edit handle");
+    goto cleanup;
+  }
+  ctx->host_app_window = ctx->edit->get_host_app_window();
+  g_host_app_window = ctx->host_app_window;
+  if (!ctx->host_app_window) {
+    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get AviUtl2 host window");
+    goto cleanup;
+  }
+  if (!gcmz_do_init(
+          &(struct gcmz_do_init_option){
+              .window = ctx->host_app_window,
+              .on_change_activate = on_change_activate,
+              .userdata = ctx,
+          },
+          &err)) {
+    OV_ERROR_ADD_TRACE(&err);
+    goto cleanup;
+  }
+  success = true;
+
+cleanup:
+  if (!success) {
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to initialize main thread dispatcher"));
+    OV_ERROR_DESTROY(&err);
   }
 }

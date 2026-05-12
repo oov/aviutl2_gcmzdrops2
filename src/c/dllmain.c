@@ -108,6 +108,24 @@ cleanup:
 DWORD __declspec(dllexport) GetVersion(void);
 DWORD __declspec(dllexport) GetVersion(void) { return GCMZ_VERSION_UINT32; }
 
+struct aviutl2_common_plugin_table *__declspec(dllexport) GetCommonPluginTable(void);
+struct aviutl2_common_plugin_table *__declspec(dllexport) GetCommonPluginTable(void) {
+  static wchar_t information[64];
+  static struct aviutl2_common_plugin_table table = {
+      .name = L"GCMZDrops",
+      .information = information,
+  };
+  if (information[0] == L'\0') {
+    ov_snprintf_wchar(information,
+                      sizeof(information) / sizeof(information[0]),
+                      L"%1$ls%2$hs",
+                      L"%1$ls %2$hs by oov",
+                      table.name,
+                      GCMZ_VERSION);
+  }
+  return &table;
+}
+
 DWORD __declspec(dllexport) RequiredVersion(void);
 DWORD __declspec(dllexport) RequiredVersion(void) { return gcmzdrops_get_required_aviutl2_version(); }
 
@@ -198,11 +216,6 @@ static void paste_from_clipboard_handler(struct aviutl2_edit_section *edit) {
 
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host);
 void __declspec(dllexport) RegisterPlugin(struct aviutl2_host_app_table *host) {
-  static wchar_t information[64];
-  ov_snprintf_wchar(
-      information, sizeof(information) / sizeof(information[0]), L"%1$hs", L"GCMZDrops %1$hs by oov", GCMZ_VERSION);
-  host->set_plugin_information(information);
-
   static wchar_t layer_menu_name[64];
   ov_snprintf_wchar(layer_menu_name,
                     sizeof(layer_menu_name) / sizeof(layer_menu_name[0]),
