@@ -60,7 +60,7 @@ bool gcmz_temp_build_path(wchar_t **const dest, wchar_t const *const filename, s
 /**
  * @brief Create unique temporary file
  *
- * Creates a temporary file with a unique name derived from the given filename.
+ * Creates a temporary file with the given filename in a unique temporary subdirectory.
  *
  * @param filename Base filename to create
  * @param dest_path [out] Full path to created file (caller must OV_ARRAY_DESTROY)

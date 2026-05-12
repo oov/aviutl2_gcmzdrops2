@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <ovarray.h>
+#include <ovnum.h>
 #include <ovthreads.h>
 
 #include "file.h"
@@ -51,6 +52,133 @@ static void entry_destroy(struct entry *const entry) {
   }
 }
 
+static bool is_hex_digit(wchar_t const c) {
+  return (L'0' <= c && c <= L'9') || (L'a' <= c && c <= L'f') || (L'A' <= c && c <= L'F');
+}
+
+static wchar_t const *find_parent_dir_name(wchar_t const *const path, wchar_t const **const parent_end) {
+  if (!path || !parent_end) {
+    return NULL;
+  }
+
+  wchar_t const *last_sep = NULL;
+  for (wchar_t const *p = path; *p; ++p) {
+    if (*p == L'\\' || *p == L'/') {
+      last_sep = p;
+    }
+  }
+  if (!last_sep || last_sep == path) {
+    return NULL;
+  }
+
+  wchar_t const *parent_start = path;
+  for (wchar_t const *p = path; p < last_sep; ++p) {
+    if (*p == L'\\' || *p == L'/') {
+      parent_start = p + 1;
+    }
+  }
+
+  *parent_end = last_sep;
+  return parent_start;
+}
+
+static bool parent_dir_name_is_unique_id(wchar_t const *const path, wchar_t const **const parent_end) {
+  wchar_t const *end = NULL;
+  wchar_t const *const name = find_parent_dir_name(path, &end);
+  if (!name) {
+    return false;
+  }
+  if ((size_t)(end - name) != 16) {
+    return false;
+  }
+  for (wchar_t const *p = name; p < end; ++p) {
+    if (!is_hex_digit(*p)) {
+      return false;
+    }
+  }
+  if (parent_end) {
+    *parent_end = end;
+  }
+  return true;
+}
+
+static bool is_current_temp_unique_parent_directory(wchar_t const *const parent_path) {
+  if (!parent_path) {
+    return false;
+  }
+
+  wchar_t temp_path[MAX_PATH];
+  DWORD const temp_len = GetTempPathW(sizeof(temp_path) / sizeof(temp_path[0]), temp_path);
+  if (temp_len == 0 || temp_len >= sizeof(temp_path) / sizeof(temp_path[0])) {
+    return false;
+  }
+
+  wchar_t prefix[MAX_PATH + 64];
+  wcscpy(prefix, temp_path);
+  wcscat(prefix, L"gcmzdrops");
+  wchar_t pid_buf[32];
+  wcscat(prefix, ov_utoa_wchar(GetCurrentProcessId(), pid_buf));
+  wcscat(prefix, L"\\");
+
+  size_t const prefix_len = wcslen(prefix);
+  if (wcsncmp(parent_path, prefix, prefix_len) != 0) {
+    return false;
+  }
+  wchar_t const *const dirname = parent_path + prefix_len;
+  if (wcslen(dirname) != 16) {
+    return false;
+  }
+  for (wchar_t const *p = dirname; *p; ++p) {
+    if (!is_hex_digit(*p)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void remove_empty_unique_parent_directory(wchar_t const *const file_path) {
+  wchar_t const *parent_end = NULL;
+  if (!parent_dir_name_is_unique_id(file_path, &parent_end)) {
+    return;
+  }
+
+  wchar_t *parent_path = NULL;
+  {
+    size_t const parent_len = (size_t)(parent_end - file_path);
+    if (!OV_ARRAY_GROW(&parent_path, parent_len + 1)) {
+      return;
+    }
+    wcsncpy(parent_path, file_path, parent_len);
+    parent_path[parent_len] = L'\0';
+    if (is_current_temp_unique_parent_directory(parent_path)) {
+      RemoveDirectoryW(parent_path);
+    }
+  }
+
+  if (parent_path) {
+    OV_ARRAY_DESTROY(&parent_path);
+  }
+}
+
+static bool delete_scheduled_file(wchar_t const *const file_path) {
+  if (!file_path) {
+    return true;
+  }
+
+  if (DeleteFileW(file_path)) {
+    remove_empty_unique_parent_directory(file_path);
+    return true;
+  }
+
+  HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+  if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) || hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) {
+    remove_empty_unique_parent_directory(file_path);
+    return true;
+  }
+
+  return false;
+}
+
 static NODISCARD bool
 entry_create(struct entry *const entry, wchar_t const *const file_path, struct ov_error *const err) {
   if (!entry || !file_path) {
@@ -86,8 +214,14 @@ static void process_queue(struct context *const ctx, uint64_t const delete_thres
     struct entry *const entry = &ctx->queue[ri];
 
     if (entry->schedule_time_seconds <= delete_threshold_seconds) {
-      DeleteFileW(entry->file_path);
-      entry_destroy(entry);
+      if (delete_scheduled_file(entry->file_path)) {
+        entry_destroy(entry);
+      } else {
+        if (wi != ri) {
+          ctx->queue[wi] = *entry;
+        }
+        ++wi;
+      }
     } else {
       if (wi != ri) {
         ctx->queue[wi] = *entry;
@@ -151,7 +285,7 @@ static void context_destroy(struct context **const ctxpp) {
     size_t const ln = OV_ARRAY_LENGTH(ctx->queue);
     for (size_t i = 0; i < ln; ++i) {
       if (ctx->queue[i].file_path) {
-        DeleteFileW(ctx->queue[i].file_path);
+        delete_scheduled_file(ctx->queue[i].file_path);
       }
       entry_destroy(&ctx->queue[i]);
     }

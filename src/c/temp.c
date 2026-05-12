@@ -16,6 +16,91 @@
 static HANDLE g_temp_dir_handle = INVALID_HANDLE_VALUE;
 static wchar_t const g_folder_prefix[] = L"gcmzdrops";
 
+static bool remove_directory_tree(wchar_t const *const dir_path, struct ov_error *const err) {
+  if (!dir_path) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  wchar_t *search_pattern = NULL;
+  wchar_t *entry_path = NULL;
+  HANDLE h = INVALID_HANDLE_VALUE;
+  bool success = false;
+
+  {
+    size_t const dir_len = wcslen(dir_path);
+    if (!OV_ARRAY_GROW(&search_pattern, dir_len + 3)) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+      goto cleanup;
+    }
+    wcscpy(search_pattern, dir_path);
+    wcscat(search_pattern, L"\\*");
+
+    WIN32_FIND_DATAW find_data = {0};
+    h = FindFirstFileW(search_pattern, &find_data);
+    if (h == INVALID_HANDLE_VALUE) {
+      HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+      if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) || hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) {
+        success = true;
+        goto cleanup;
+      }
+      OV_ERROR_SET_HRESULT(err, hr);
+      goto cleanup;
+    }
+
+    do {
+      if (wcscmp(find_data.cFileName, L".") == 0 || wcscmp(find_data.cFileName, L"..") == 0) {
+        continue;
+      }
+      if (!OV_ARRAY_GROW(&entry_path, dir_len + 1 + wcslen(find_data.cFileName) + 1)) {
+        OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+        goto cleanup;
+      }
+      wcscpy(entry_path, dir_path);
+      wcscat(entry_path, L"\\");
+      wcscat(entry_path, find_data.cFileName);
+      if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        if (!remove_directory_tree(entry_path, err)) {
+          OV_ERROR_ADD_TRACE(err);
+          goto cleanup;
+        }
+      } else {
+        if (!DeleteFileW(entry_path)) {
+          HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+          OV_ERROR_SET_HRESULT(err, hr);
+          goto cleanup;
+        }
+      }
+    } while (FindNextFileW(h, &find_data));
+
+    HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+    if (hr != HRESULT_FROM_WIN32(ERROR_NO_MORE_FILES)) {
+      OV_ERROR_SET_HRESULT(err, hr);
+      goto cleanup;
+    }
+  }
+
+  success = true;
+
+cleanup:
+  if (h != INVALID_HANDLE_VALUE) {
+    FindClose(h);
+    h = INVALID_HANDLE_VALUE;
+  }
+  if (success && !RemoveDirectoryW(dir_path)) {
+    HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+    OV_ERROR_SET_HRESULT(err, hr);
+    success = false;
+  }
+  if (entry_path) {
+    OV_ARRAY_DESTROY(&entry_path);
+  }
+  if (search_pattern) {
+    OV_ARRAY_DESTROY(&search_pattern);
+  }
+  return success;
+}
+
 static bool build_temp_directory_path(wchar_t **const dest, DWORD const process_id, struct ov_error *const err) {
   if (!dest) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
@@ -94,9 +179,16 @@ static bool temp_remove_directory_by_process_id(DWORD process_id, struct ov_erro
       wcscat(file_path, L"\\");
       wcscat(file_path, find_data.cFileName);
       if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        RemoveDirectoryW(file_path);
+        if (!remove_directory_tree(file_path, err)) {
+          OV_ERROR_ADD_TRACE(err);
+          goto cleanup;
+        }
       } else {
-        DeleteFileW(file_path);
+        if (!DeleteFileW(file_path)) {
+          HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+          OV_ERROR_SET_HRESULT(err, hr);
+          goto cleanup;
+        }
       }
     }
   } while (FindNextFileW(h, &find_data));
@@ -291,47 +383,6 @@ cleanup:
   return success;
 }
 
-static size_t extract_file_name(wchar_t const *path) {
-  if (!path) {
-    return 0;
-  }
-
-  wchar_t const *bslash = wcsrchr(path, L'\\');
-  wchar_t const *slash = wcsrchr(path, L'/');
-  wchar_t const *separator = NULL;
-
-  if (bslash == NULL && slash == NULL) {
-    return 0;
-  } else if (bslash != NULL && slash != NULL) {
-    separator = bslash > slash ? bslash : slash;
-  } else {
-    separator = bslash != NULL ? bslash : slash;
-  }
-
-  return (size_t)(separator + 1 - path);
-}
-
-static size_t extract_file_extension(wchar_t const *filename) {
-  if (!filename) {
-    return 0;
-  }
-
-  size_t len = wcslen(filename);
-  size_t filename_start = extract_file_name(filename);
-
-  // Look for extension in filename part only
-  for (size_t i = len; i > filename_start; --i) {
-    if (filename[i - 1] == L'.') {
-      // Don't treat dot at start of filename as extension (e.g., ".gitignore")
-      if (i - 1 > filename_start) {
-        return i - 1;
-      }
-    }
-  }
-
-  return len; // No extension found
-}
-
 static void format_hex_string_wchar(wchar_t *dest, uint64_t value) {
   for (int i = 0; i < 16; ++i) {
     wchar_t hex_char = (value >> (60 - i * 4)) & 0xF;
@@ -365,33 +416,34 @@ bool gcmz_temp_create_unique_file(wchar_t const *const filename,
   {
     size_t const temp_dir_len = wcslen(temp_dir);
     size_t const actual_filename_len = wcslen(actual_filename);
-    size_t const ext_pos = extract_file_extension(actual_filename);
-    size_t const ext_len = actual_filename_len - ext_pos;
 
-    wchar_t const *basename = actual_filename;
-    size_t basename_len = ext_pos;
-    if (actual_filename_len > 0 && basename_len == 0) {
-      basename = L"tmp";
-      basename_len = 3;
-    }
-
-    // Build path: temp_dir + "\\" + basename + "_" + 16-hex + extension
-    size_t const path_len = temp_dir_len + 1 + basename_len + 1 + 16 + ext_len;
+    // Build path: temp_dir + "\\" + 16-hex + "\\" + filename
+    size_t const path_len = temp_dir_len + 1 + 16 + 1 + actual_filename_len;
     if (!OV_ARRAY_GROW(&temp_dir, path_len + 1)) {
       OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
       goto cleanup;
     }
 
     temp_dir[temp_dir_len] = L'\\';
-    wcsncpy(temp_dir + temp_dir_len + 1, basename, basename_len);
-    temp_dir[temp_dir_len + 1 + basename_len] = L'_';
-    wcscpy(temp_dir + temp_dir_len + 1 + basename_len + 1 + 16, actual_filename + ext_pos);
+    temp_dir[temp_dir_len + 1 + 16] = L'\\';
+    wcscpy(temp_dir + temp_dir_len + 1 + 16 + 1, actual_filename);
 
-    wchar_t *digits = temp_dir + temp_dir_len + 1 + basename_len + 1;
+    wchar_t *digits = temp_dir + temp_dir_len + 1;
     uint64_t rng_state = ov_rand_splitmix64(ov_rand_get_global_hint() + GetTickCount64());
     for (int attempt = 0; attempt < 5; ++attempt) {
       rng_state = ov_rand_splitmix64_next(rng_state);
       format_hex_string_wchar(digits, rng_state);
+      temp_dir[temp_dir_len + 1 + 16] = L'\0';
+      if (!CreateDirectoryW(temp_dir, NULL)) {
+        HRESULT const hr = HRESULT_FROM_WIN32(GetLastError());
+        if (hr == HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)) {
+          temp_dir[temp_dir_len + 1 + 16] = L'\\';
+          continue;
+        }
+        OV_ERROR_SET_HRESULT(err, hr);
+        goto cleanup;
+      }
+      temp_dir[temp_dir_len + 1 + 16] = L'\\';
       h = CreateFileW(temp_dir, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, NULL);
       if (h != INVALID_HANDLE_VALUE) {
         *dest_path = temp_dir;
@@ -401,6 +453,9 @@ bool gcmz_temp_create_unique_file(wchar_t const *const filename,
         goto cleanup;
       }
       HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+      temp_dir[temp_dir_len + 1 + 16] = L'\0';
+      RemoveDirectoryW(temp_dir);
+      temp_dir[temp_dir_len + 1 + 16] = L'\\';
       if (hr != HRESULT_FROM_WIN32(ERROR_FILE_EXISTS)) {
         OV_ERROR_SET_HRESULT(err, hr);
         goto cleanup;

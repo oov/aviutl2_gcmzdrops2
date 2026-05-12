@@ -121,6 +121,9 @@ static void test_copy_needs_determination(void) {
   wchar_t program_files_path[MAX_PATH];
   static wchar_t const *const users_bin = L"C:\\Users\\test.bin";
   static wchar_t const *const users_txt = L"C:\\Users\\test.txt";
+  static wchar_t const *const users_au2pkg_zip = L"C:\\Users\\test.au2pkg.zip";
+  static wchar_t const *const users_zip = L"C:\\Users\\test.zip";
+  static wchar_t const *const users_au2pkg_zip_upper = L"C:\\Users\\TEST.AU2PKG.ZIP";
   static wchar_t const *const temp_object = L"C:\\temp\\test.object";
 
   GetTempPathW(MAX_PATH, temp_path);
@@ -136,6 +139,9 @@ static void test_copy_needs_determination(void) {
   TEST_CHECK(check_is_copy_needed(program_files_path, gcmz_processing_mode_direct, ov_false));
   TEST_CHECK(check_is_copy_needed(users_bin, gcmz_processing_mode_copy, ov_true));
   TEST_CHECK(check_is_copy_needed(users_txt, gcmz_processing_mode_copy, ov_false));
+  TEST_CHECK(check_is_copy_needed(users_au2pkg_zip, gcmz_processing_mode_copy, ov_false));
+  TEST_CHECK(check_is_copy_needed(users_au2pkg_zip_upper, gcmz_processing_mode_copy, ov_false));
+  TEST_CHECK(check_is_copy_needed(users_zip, gcmz_processing_mode_copy, ov_true));
   TEST_CHECK(check_is_copy_needed(temp_object, gcmz_processing_mode_auto, ov_false));
 }
 

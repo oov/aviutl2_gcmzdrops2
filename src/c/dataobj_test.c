@@ -133,6 +133,8 @@ static void test_create_temp_file_from_data(void) {
   TEST_CHECK(file->temporary);
   TEST_ASSERT(file->mime_type != NULL);
   TEST_CHECK(wcscmp(file->mime_type, L"text/plain") == 0);
+  TEST_ASSERT(file->path != NULL);
+  TEST_CHECK(wcscmp(file->path + extract_file_name(file->path), L"test_base.txt") == 0);
 
   struct ovl_file *ovl_f = NULL;
   struct ov_error file_err = {0};

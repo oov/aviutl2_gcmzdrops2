@@ -516,6 +516,46 @@ static void test_hook_functions_no_modules(void) {
   gcmz_lua_destroy(&ctx);
 }
 
+static void test_hook_functions_preserve_temporary_flag(void) {
+  struct gcmz_lua_context *ctx = NULL;
+  struct gcmz_file_list *file_list = NULL;
+  struct ov_error err = {0};
+
+  if (!TEST_SUCCEEDED(gcmz_lua_create(&ctx, &err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_lua_setup(ctx, &(struct gcmz_lua_options){.script_dir = LUA_SRC_DIR}, &err), &err)) {
+    goto cleanup;
+  }
+
+  file_list = gcmz_file_list_create(&err);
+  if (!TEST_SUCCEEDED(file_list != NULL, &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(
+          gcmz_file_list_add_temporary(file_list, L"C:\\test\\script.anm2", L"application/octet-stream", &err), &err)) {
+    goto cleanup;
+  }
+
+  if (!TEST_SUCCEEDED(gcmz_lua_call_drag_enter(ctx, file_list, 0, 0, false, &err), &err)) {
+    goto cleanup;
+  }
+
+  {
+    struct gcmz_file const *const file = gcmz_file_list_get(file_list, 0);
+    TEST_CHECK(file != NULL);
+    TEST_CHECK(file && file->temporary);
+  }
+
+cleanup:
+  if (file_list) {
+    gcmz_file_list_destroy(&file_list);
+  }
+  if (ctx) {
+    gcmz_lua_destroy(&ctx);
+  }
+}
+
 static void test_hook_functions_null_file_list(void) {
   struct gcmz_lua_context *ctx = NULL;
   struct ov_error err = {0};
@@ -1257,6 +1297,7 @@ TEST_LIST = {
     {"multiple_contexts", test_multiple_contexts},
     {"hook_functions_null_context", test_hook_functions_null_context},
     {"hook_functions_no_modules", test_hook_functions_no_modules},
+    {"hook_functions_preserve_temporary_flag", test_hook_functions_preserve_temporary_flag},
     {"hook_functions_null_file_list", test_hook_functions_null_file_list},
     {"drag_session_workflow", test_drag_session_workflow},
     {"add_handler_script", test_add_handler_script},

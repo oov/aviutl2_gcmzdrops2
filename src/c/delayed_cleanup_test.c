@@ -23,6 +23,38 @@ static bool file_exists(wchar_t const *const file_path) {
   return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+static bool directory_exists(wchar_t const *const dir_path) {
+  DWORD const attrs = GetFileAttributesW(dir_path);
+  return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static bool get_parent_path(wchar_t const *const file_path, wchar_t **const parent_path, struct ov_error *const err) {
+  if (!file_path || !parent_path) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  wchar_t const *last_sep = NULL;
+  for (wchar_t const *p = file_path; *p; ++p) {
+    if (*p == L'\\' || *p == L'/') {
+      last_sep = p;
+    }
+  }
+  if (!last_sep || last_sep == file_path) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
+    return false;
+  }
+
+  size_t const parent_len = (size_t)(last_sep - file_path);
+  if (!OV_ARRAY_GROW(parent_path, parent_len + 1)) {
+    OV_ERROR_SET_GENERIC(err, ov_error_generic_out_of_memory);
+    return false;
+  }
+  wcsncpy(*parent_path, file_path, parent_len);
+  (*parent_path)[parent_len] = L'\0';
+  return true;
+}
+
 static void test_delayed_cleanup_init_exit(void) {
   struct ov_error err = {0};
   if (TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
@@ -63,6 +95,90 @@ cleanup:
   if (test_file_path) {
     OV_ARRAY_DESTROY(&test_file_path);
   }
+  gcmz_temp_remove_directory();
+}
+
+static void test_delayed_cleanup_removes_unique_parent_directory(void) {
+  struct ov_error err = {0};
+  wchar_t *test_file_path = NULL;
+  wchar_t *parent_path = NULL;
+
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_temp_create_directory(&err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"original-name.anm2", &test_file_path, &err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(get_parent_path(test_file_path, &parent_path, &err), &err)) {
+    goto cleanup;
+  }
+
+  TEST_CHECK(file_exists(test_file_path));
+  TEST_CHECK(directory_exists(parent_path));
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_schedule_file(test_file_path, &err), &err)) {
+    goto cleanup;
+  }
+  gcmz_delayed_cleanup_exit();
+  TEST_CHECK(!file_exists(test_file_path));
+  TEST_CHECK(!directory_exists(parent_path));
+
+cleanup:
+  if (parent_path) {
+    OV_ARRAY_DESTROY(&parent_path);
+  }
+  if (test_file_path) {
+    OV_ARRAY_DESTROY(&test_file_path);
+  }
+  gcmz_delayed_cleanup_exit();
+  gcmz_temp_remove_directory();
+}
+
+static void test_delayed_cleanup_keeps_unique_parent_directory_when_file_is_locked(void) {
+  struct ov_error err = {0};
+  wchar_t *test_file_path = NULL;
+  wchar_t *parent_path = NULL;
+  HANDLE locked_file = INVALID_HANDLE_VALUE;
+
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_init(&err), &err)) {
+    return;
+  }
+  if (!TEST_SUCCEEDED(gcmz_temp_create_directory(&err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"locked.anm2", &test_file_path, &err), &err)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(get_parent_path(test_file_path, &parent_path, &err), &err)) {
+    goto cleanup;
+  }
+
+  locked_file = CreateFileW(test_file_path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (!TEST_CHECK(locked_file != INVALID_HANDLE_VALUE)) {
+    goto cleanup;
+  }
+  if (!TEST_SUCCEEDED(gcmz_delayed_cleanup_schedule_file(test_file_path, &err), &err)) {
+    goto cleanup;
+  }
+
+  gcmz_delayed_cleanup_exit();
+  TEST_CHECK(file_exists(test_file_path));
+  TEST_CHECK(directory_exists(parent_path));
+
+cleanup:
+  if (locked_file != INVALID_HANDLE_VALUE) {
+    CloseHandle(locked_file);
+    locked_file = INVALID_HANDLE_VALUE;
+  }
+  if (parent_path) {
+    OV_ARRAY_DESTROY(&parent_path);
+  }
+  if (test_file_path) {
+    OV_ARRAY_DESTROY(&test_file_path);
+  }
+  gcmz_delayed_cleanup_exit();
   gcmz_temp_remove_directory();
 }
 
@@ -179,6 +295,9 @@ static void test_delayed_cleanup_invalid_arguments(void) {
 TEST_LIST = {
     {"test_delayed_cleanup_init_exit", test_delayed_cleanup_init_exit},
     {"test_delayed_cleanup_schedule_file", test_delayed_cleanup_schedule_file},
+    {"test_delayed_cleanup_removes_unique_parent_directory", test_delayed_cleanup_removes_unique_parent_directory},
+    {"test_delayed_cleanup_keeps_unique_parent_directory_when_file_is_locked",
+     test_delayed_cleanup_keeps_unique_parent_directory_when_file_is_locked},
     {"test_delayed_cleanup_schedule_nonexistent_file", test_delayed_cleanup_schedule_nonexistent_file},
     {"test_delayed_cleanup_schedule_temporary_files", test_delayed_cleanup_schedule_temporary_files},
     {"test_delayed_cleanup_invalid_arguments", test_delayed_cleanup_invalid_arguments},

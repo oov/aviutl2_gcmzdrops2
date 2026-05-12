@@ -93,7 +93,7 @@ static bool create_files_table(lua_State *L, struct gcmz_file_list const *const 
       goto cleanup;
     }
 
-    lua_createtable(L, 0, 2);
+    lua_createtable(L, 0, 3);
 
     if (!gcmz_wchar_to_utf8(file->path, &buffer, err)) {
       OV_ERROR_ADD_TRACE(err);
@@ -106,6 +106,9 @@ static bool create_files_table(lua_State *L, struct gcmz_file_list const *const 
       goto cleanup;
     }
     LUA_SET_STRING_FIELD(L, "mimetype", buffer);
+
+    lua_pushboolean(L, file->temporary);
+    lua_setfield(L, -2, "temporary");
 
     lua_rawseti(L, -2, (int)(i + 1));
   }

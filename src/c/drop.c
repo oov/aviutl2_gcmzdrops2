@@ -1078,6 +1078,10 @@ wrapped_drop_target_drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyS
 
 cleanup:
 
+  EnterCriticalSection(&impl->cs);
+  cleanup_current_entry(impl);
+  LeaveCriticalSection(&impl->cs);
+
   if (replacement_dataobj) {
     IDataObject_Release(replacement_dataobj);
   }

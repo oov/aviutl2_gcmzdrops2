@@ -31,6 +31,38 @@ static void test_cleanup(void) { gcmz_temp_remove_directory(); }
 #include <ovarray.h>
 #include <stdio.h>
 
+static wchar_t const *path_filename(wchar_t const *const path) {
+  wchar_t const *const bslash = wcsrchr(path, L'\\');
+  wchar_t const *const slash = wcsrchr(path, L'/');
+  if (!bslash && !slash) {
+    return path;
+  }
+  if (bslash && slash) {
+    return (bslash > slash ? bslash : slash) + 1;
+  }
+  return (bslash ? bslash : slash) + 1;
+}
+
+static wchar_t const *path_parent_filename(wchar_t const *const path) {
+  static wchar_t parent[32];
+  wchar_t const *const filename = path_filename(path);
+  if (!filename || filename == path) {
+    return L"";
+  }
+  wchar_t const *const parent_end = filename - 1;
+  wchar_t const *p = parent_end;
+  while (p > path && p[-1] != L'\\' && p[-1] != L'/') {
+    --p;
+  }
+  size_t const len = (size_t)(parent_end - p);
+  if (len >= sizeof(parent) / sizeof(parent[0])) {
+    return L"";
+  }
+  wcsncpy(parent, p, len);
+  parent[len] = L'\0';
+  return parent;
+}
+
 static void test_gcmz_temp_create_unique_file_success(void) {
   wchar_t *temp_file = NULL;
   struct ov_error err = {0};
@@ -40,11 +72,8 @@ static void test_gcmz_temp_create_unique_file_success(void) {
 
   // Verify file path was returned
   if (TEST_CHECK(temp_file != NULL)) {
-    // Verify file extension is correct
-    TEST_CHECK(wcsstr(temp_file, L".txt") != NULL);
-
-    // Verify filename contains base name with underscore
-    TEST_CHECK(wcsstr(temp_file, L"temp_") != NULL);
+    TEST_CHECK(wcscmp(path_filename(temp_file), L"temp.txt") == 0);
+    TEST_CHECK(wcslen(path_parent_filename(temp_file)) == 16);
 
     // Verify file exists
     HANDLE hFile = CreateFileW(temp_file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -67,31 +96,28 @@ static void test_gcmz_temp_create_unique_file_edge_cases(void) {
   // Test very long extension
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"test.verylongextension", &file1, &err), &err)) {
     if (TEST_CHECK(file1 != NULL)) {
-      TEST_CHECK(wcsstr(file1, L".verylongextension") != NULL);
-      TEST_CHECK(wcsstr(file1, L"test_") != NULL);
+      TEST_CHECK(wcscmp(path_filename(file1), L"test.verylongextension") == 0);
     }
   }
 
   // Test no extension
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"noextension", &file2, &err), &err)) {
     if (TEST_CHECK(file2 != NULL)) {
-      TEST_CHECK(wcsstr(file2, L"noextension_") != NULL);
+      TEST_CHECK(wcscmp(path_filename(file2), L"noextension") == 0);
     }
   }
 
   // Test very long filename
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"verylongfilenamethatexceedstypiclimits.txt", &file3, &err), &err)) {
     if (TEST_CHECK(file3 != NULL)) {
-      TEST_CHECK(wcsstr(file3, L".txt") != NULL);
-      TEST_CHECK(wcsstr(file3, L"verylongfilenamethatexceedstypiclimits_") != NULL);
+      TEST_CHECK(wcscmp(path_filename(file3), L"verylongfilenamethatexceedstypiclimits.txt") == 0);
     }
   }
 
   // Test single character filename
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"a.b", &file4, &err), &err)) {
     if (TEST_CHECK(file4 != NULL)) {
-      TEST_CHECK(wcsstr(file4, L".b") != NULL);
-      TEST_CHECK(wcsstr(file4, L"a_") != NULL);
+      TEST_CHECK(wcscmp(path_filename(file4), L"a.b") == 0);
     }
   }
 
@@ -211,16 +237,14 @@ static void test_gcmz_temp_create_unique_file_default_filename(void) {
   // Test with NULL filename (should use "tmp.bin")
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(NULL, &temp_file1, &err), &err)) {
     if (TEST_CHECK(temp_file1 != NULL)) {
-      TEST_CHECK(wcsstr(temp_file1, L"tmp_") != NULL);
-      TEST_CHECK(wcsstr(temp_file1, L".bin") != NULL);
+      TEST_CHECK(wcscmp(path_filename(temp_file1), L"tmp.bin") == 0);
     }
   }
 
   // Test with empty string filename (should use "tmp.bin")
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L"", &temp_file2, &err), &err)) {
     if (TEST_CHECK(temp_file2 != NULL)) {
-      TEST_CHECK(wcsstr(temp_file2, L"tmp_") != NULL);
-      TEST_CHECK(wcsstr(temp_file2, L".bin") != NULL);
+      TEST_CHECK(wcscmp(path_filename(temp_file2), L"tmp.bin") == 0);
     }
   }
 
@@ -259,8 +283,7 @@ static void test_gcmz_temp_create_unique_file_dot_filenames(void) {
   // Test with dot at start (hidden file style)
   if (TEST_SUCCEEDED(gcmz_temp_create_unique_file(L".gitignore", &temp_file, &err), &err)) {
     if (TEST_CHECK(temp_file != NULL)) {
-      // Should use ".gitignore" as basename since dot-prefixed files are treated as basenames
-      TEST_CHECK(wcsstr(temp_file, L".gitignore_") != NULL);
+      TEST_CHECK(wcscmp(path_filename(temp_file), L".gitignore") == 0);
     }
   }
 
