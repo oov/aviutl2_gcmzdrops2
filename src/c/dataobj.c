@@ -17,6 +17,7 @@
 #include <shlobj.h>
 
 #include <ovarray.h>
+#include <ovmo.h>
 
 #include <ovl/path.h>
 #include <ovl/source.h>
@@ -24,6 +25,7 @@
 #include "dataobj_stream.h"
 #include "datauri.h"
 #include "file.h"
+#include "logf.h"
 #include "sniffer.h"
 #include "temp.h"
 
@@ -424,7 +426,7 @@ try_extract_file_contents(IDataObject *const dataobj, struct gcmz_file_list *con
   }
 
   FILEGROUPDESCRIPTORW *desc = NULL;
-  size_t const initial_count = gcmz_file_list_count(files);
+  size_t added_count = 0;
   bool result = false;
 
   {
@@ -465,6 +467,11 @@ try_extract_file_contents(IDataObject *const dataobj, struct gcmz_file_list *con
         OV_ERROR_ADD_TRACE(err);
         goto cleanup;
       }
+      ++added_count;
+    }
+    if (added_count == 0) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_not_found);
+      goto cleanup;
     }
   }
 
@@ -474,13 +481,23 @@ cleanup:
   if (desc) {
     OV_ARRAY_DESTROY(&desc);
   }
-  if (!result) {
+  if (!result && added_count > 0) {
     // Rollback: Remove any files added during this failed operation
-    size_t const current_count = gcmz_file_list_count(files);
-    for (size_t i = current_count; i > initial_count; --i) {
-      struct gcmz_file const *const file = gcmz_file_list_get_mutable(files, i - 1);
+    size_t n = gcmz_file_list_count(files);
+    size_t const target = n - added_count;
+    while (n > target) {
+      struct gcmz_file const *const file = gcmz_file_list_get_mutable(files, --n);
+      struct ov_error err2 = {0};
       if (file && file->path && file->temporary) {
-        DeleteFileW(file->path); // Remove temporary file
+        if (!DeleteFileW(file->path)) {
+          OV_ERROR_SET_HRESULT(&err2, HRESULT_FROM_WIN32(GetLastError()));
+          gcmz_logf_warn(&err2, "%1$ls", gettext("failed to delete temporary file: %1$ls"), file->path);
+          OV_ERROR_DESTROY(&err2);
+        }
+      }
+      if (!gcmz_file_list_remove(files, n, &err2)) {
+        gcmz_logf_warn(&err2, NULL, "%1$hs", gettext("failed to remove an entry from the file list"));
+        OV_ERROR_DESTROY(&err2);
       }
     }
   }
@@ -581,6 +598,7 @@ try_extract_hdrop_format(IDataObject *const dataobj, struct gcmz_file_list *cons
     return false;
   }
 
+  size_t added_count = 0;
   struct ovl_source *source = NULL;
   wchar_t *filename = NULL;
   wchar_t *filenames_data = NULL;
@@ -652,8 +670,13 @@ try_extract_hdrop_format(IDataObject *const dataobj, struct gcmz_file_list *cons
         OV_ERROR_ADD_TRACE(err);
         goto cleanup;
       }
+      ++added_count;
 
       current += len + 1;
+    }
+    if (added_count == 0) {
+      OV_ERROR_SET_GENERIC(err, ov_error_generic_not_found);
+      goto cleanup;
     }
   }
 
@@ -668,6 +691,17 @@ cleanup:
   }
   if (source) {
     ovl_source_destroy(&source);
+  }
+  if (!result && added_count > 0) {
+    size_t n = gcmz_file_list_count(files);
+    size_t const target = n - added_count;
+    while (n > target) {
+      struct ov_error err2 = {0};
+      if (!gcmz_file_list_remove(files, --n, &err2)) {
+        gcmz_logf_warn(&err2, NULL, "%1$hs", gettext("failed to remove an entry from the file list"));
+        OV_ERROR_DESTROY(&err2);
+      }
+    }
   }
   return result;
 }

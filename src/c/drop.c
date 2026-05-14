@@ -754,7 +754,9 @@ static HRESULT STDMETHODCALLTYPE wrapped_drop_target_drag_enter(
       // No files extracted, proceed with original data object
       OV_ERROR_DESTROY(&err);
       success = true;
+      goto cleanup;
     }
+    gcmz_logf_warn(&err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drag_enter");
     OV_ERROR_ADD_TRACE(&err);
     goto cleanup;
   }
@@ -1010,6 +1012,12 @@ wrapped_drop_target_drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyS
 #if GCMZ_DEBUG
     OutputDebugStringW(L"wrapped_drop_target_drop: No replacement, passing through original\n");
 #endif
+    if (ov_error_is(&err, ov_error_type_generic, ov_error_generic_not_found)) {
+      OV_ERROR_DESTROY(&err);
+      goto cleanup;
+    }
+    gcmz_logf_warn(&err, "%1$s", gettext("error occurred while executing %1$s script handler"), "drop");
+    OV_ERROR_DESTROY(&err);
     goto cleanup;
   }
 
