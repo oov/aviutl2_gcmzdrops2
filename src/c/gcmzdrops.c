@@ -2259,17 +2259,10 @@ void gcmzdrops_register(struct gcmzdrops *const ctx, struct aviutl2_host_app_tab
   }
   struct ov_error err = {0};
   bool success = false;
-  struct aviutl2_edit_handle *const edit = host->create_edit_handle();
-  if (edit) {
-    ctx->edit = edit;
-  }
-  if (!ctx->edit || !ctx->edit->get_host_app_window) {
-    OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get AviUtl2 edit handle");
-    goto cleanup;
-  }
+  ctx->edit = host->create_edit_handle();
   ctx->host_app_window = ctx->edit->get_host_app_window();
   g_host_app_window = ctx->host_app_window;
-  if (!ctx->host_app_window) {
+  if (!g_host_app_window) {
     OV_ERROR_SET(&err, ov_error_type_generic, ov_error_generic_fail, "failed to get AviUtl2 host window");
     goto cleanup;
   }
