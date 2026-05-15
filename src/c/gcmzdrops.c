@@ -2280,7 +2280,7 @@ void gcmzdrops_register(struct gcmzdrops *const ctx, struct aviutl2_host_app_tab
 
 cleanup:
   if (!success) {
-    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to initialize main thread dispatcher"));
+    gcmz_logf_error(&err, "%1$hs", "%1$hs", gettext("failed to prepare processing"));
     OV_ERROR_DESTROY(&err);
   }
 }
