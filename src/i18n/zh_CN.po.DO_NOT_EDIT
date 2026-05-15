@@ -107,10 +107,6 @@ msgid "Failed to initialize GCMZDrops."
 msgstr "GCMZDrops初始化失败。"
 
 msgctxt "external_api"
-msgid "Failed to initialize external API."
-msgstr "外部API初始化失败。"
-
-msgctxt "external_api"
 msgid "Failed to initialize the external API."
 msgstr "外部API初始化失败。"
 

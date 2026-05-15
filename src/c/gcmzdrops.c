@@ -824,7 +824,7 @@ static bool create_external_api(struct gcmzdrops *const ctx, bool const use_retr
                       sizeof(main_instruction) / sizeof(main_instruction[0]),
                       L"%s",
                       L"%s",
-                      pgettext("external_api", "Failed to initialize external API."));
+                      pgettext("external_api", "Failed to initialize the external API."));
     ov_snprintf_wchar(content,
                       sizeof(content) / sizeof(content[0]),
                       L"%s",
