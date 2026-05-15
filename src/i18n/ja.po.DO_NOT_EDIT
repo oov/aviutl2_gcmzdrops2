@@ -289,6 +289,10 @@ msgstr "遅延初期化の完了に失敗しました"
 msgid "failed to create unique temporary file"
 msgstr "一意な一時ファイルの作成に失敗しました"
 
+#, c-format
+msgid "failed to delete temporary file: %1$ls"
+msgstr "一時ファイルの削除に失敗しました: %1$ls"
+
 msgid "failed to drop from external API request"
 msgstr "外部連携APIリクエストからのドロップに失敗しました"
 
@@ -317,8 +321,14 @@ msgstr "タイムラインへのファイルの挿入に失敗しました"
 msgid "failed to paste from clipboard"
 msgstr "クリップボードからの貼り付けに失敗しました"
 
+msgid "failed to prepare processing"
+msgstr "処理の準備に失敗しました"
+
 msgid "failed to register script module %1$hs from %2$hs"
-msgstr "%1$hs からのスクリプトモジュール追加に失敗しました"
+msgstr "%2$hs からスクリプトモジュール %1$hs を登録できませんでした"
+
+msgid "failed to remove an entry from the file list"
+msgstr "ファイル一覧から項目を削除できませんでした"
 
 msgid "failed to remove temporary directory"
 msgstr "一時ディレクトリの削除に失敗しました"
