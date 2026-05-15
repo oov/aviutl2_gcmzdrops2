@@ -369,28 +369,33 @@ static NODISCARD bool process_single_file(IDataObject *const dataobj,
                                           CLIPFORMAT fmt,
                                           LONG index,
                                           FILEDESCRIPTORW const *const fd,
+                                          bool (*should_skip_virtual_file)(wchar_t const *filename),
                                           struct gcmz_file_list *const files,
                                           struct ov_error *const err) {
   void *data = NULL;
   bool result = false;
 
   {
-    size_t len = 0;
-    if (!get_data(dataobj, fmt, index, &data, &len, err)) {
-      OV_ERROR_ADD_TRACE(err);
-      goto cleanup;
-    }
-
     wchar_t filename[MAX_PATH];
-    wchar_t extension[MAX_PATH];
+    wchar_t extension[MAX_PATH] = L"";
     size_t const name_pos = extract_file_name(fd->cFileName);
     wcsncpy(filename, fd->cFileName + name_pos, MAX_PATH - 1);
     filename[MAX_PATH - 1] = L'\0';
     sanitize_filename(filename);
+    if (should_skip_virtual_file && should_skip_virtual_file(filename)) {
+      result = true;
+      goto cleanup;
+    }
     size_t const ext_pos = extract_file_extension(filename);
     if (ext_pos < wcslen(filename)) {
       wcscpy(extension, filename + ext_pos);
       filename[ext_pos] = L'\0';
+    }
+
+    size_t len = 0;
+    if (!get_data(dataobj, fmt, index, &data, &len, err)) {
+      OV_ERROR_ADD_TRACE(err);
+      goto cleanup;
     }
 
     wchar_t const *suggested_ext = NULL;
@@ -418,8 +423,10 @@ cleanup:
   return result;
 }
 
-static NODISCARD bool
-try_extract_file_contents(IDataObject *const dataobj, struct gcmz_file_list *const files, struct ov_error *const err) {
+static NODISCARD bool try_extract_file_contents(IDataObject *const dataobj,
+                                                bool (*should_skip_virtual_file)(wchar_t const *filename),
+                                                struct gcmz_file_list *const files,
+                                                struct ov_error *const err) {
   if (!dataobj || !files) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
     return false;
@@ -463,7 +470,7 @@ try_extract_file_contents(IDataObject *const dataobj, struct gcmz_file_list *con
       if (fd->dwFlags & FD_ATTRIBUTES && fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         continue;
       }
-      if (!process_single_file(dataobj, fc_fmt, (LONG)i, fd, files, err)) {
+      if (!process_single_file(dataobj, fc_fmt, (LONG)i, fd, should_skip_virtual_file, files, err)) {
         OV_ERROR_ADD_TRACE(err);
         goto cleanup;
       }
@@ -903,6 +910,7 @@ cleanup:
 
 NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
                                                  struct gcmz_file_list *const file_list,
+                                                 struct gcmz_dataobj_extract_options const *const options,
                                                  struct ov_error *const err) {
   if (!dataobj || !file_list) {
     OV_ERROR_SET_GENERIC(err, ov_error_generic_invalid_argument);
@@ -913,15 +921,15 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Starting custom format extraction\n");
 #endif
 
-  size_t initial_count = gcmz_file_list_count(file_list);
   IDataObject *const obj = (IDataObject *)dataobj;
+  bool (*should_skip_virtual_file)(wchar_t const *filename) = options ? options->should_skip_virtual_file : NULL;
 
   // 1. Data URI (highest priority - no false positives)
 #if GCMZ_DEBUG
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying Data URI format\n");
 #endif
   bool data_uri_ret = try_extract_data_uri(obj, file_list, err);
-  if (data_uri_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (data_uri_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Data URI format extraction succeeded\n");
 #endif
@@ -939,7 +947,7 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying PNG format\n");
 #endif
   bool png_ret = try_extract_custom_image_format(obj, L"PNG", L".png", L"image/png", file_list, err);
-  if (png_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (png_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: PNG format extraction succeeded\n");
 #endif
@@ -957,7 +965,7 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying JPEG format\n");
 #endif
   bool jpeg_ret = try_extract_custom_image_format(obj, L"JPEG", L".jpg", L"image/jpeg", file_list, err);
-  if (jpeg_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (jpeg_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: JPEG format extraction succeeded\n");
 #endif
@@ -974,8 +982,8 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
 #if GCMZ_DEBUG
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying FileContents format\n");
 #endif
-  bool file_contents_ret = try_extract_file_contents(obj, file_list, err);
-  if (file_contents_ret && gcmz_file_list_count(file_list) > initial_count) {
+  bool file_contents_ret = try_extract_file_contents(obj, should_skip_virtual_file, file_list, err);
+  if (file_contents_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: FileContents format extraction succeeded\n");
 #endif
@@ -993,7 +1001,7 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying HDROP format\n");
 #endif
   bool hdrop_ret = try_extract_hdrop_format(obj, file_list, err);
-  if (hdrop_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (hdrop_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: HDROP format extraction succeeded\n");
 #endif
@@ -1011,7 +1019,7 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying DIB format\n");
 #endif
   bool dib_ret = try_extract_dib_format(obj, file_list, err);
-  if (dib_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (dib_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: DIB format extraction succeeded\n");
 #endif
@@ -1029,7 +1037,7 @@ NODISCARD bool gcmz_dataobj_extract_from_dataobj(void *const dataobj,
   OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Trying plain text fallback\n");
 #endif
   bool text_ret = try_extract_plain_text(obj, file_list, err);
-  if (text_ret && gcmz_file_list_count(file_list) > initial_count) {
+  if (text_ret) {
 #if GCMZ_DEBUG
     OutputDebugStringW(L"gcmz_dataobj_extract_from_dataobj: Plain text fallback succeeded\n");
 #endif

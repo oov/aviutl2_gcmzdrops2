@@ -200,6 +200,7 @@ add_library(gcmzdrops SHARED
   copy.c
   error.c
   file.c
+  gcmz_file_types.c
   gcmzdrops.c
   gcmzdrops.rc
   i18n.rc
@@ -417,7 +418,7 @@ target_link_libraries(test_drop PRIVATE
 )
 add_test(NAME test_drop COMMAND test_drop)
 
-add_executable(test_dataobj dataobj_test.c dataobj_stream.c datauri.c file.c sniffer.c temp.c)
+add_executable(test_dataobj dataobj_test.c dataobj_stream.c datauri.c file.c gcmz_file_types.c sniffer.c temp.c logf.c)
 target_link_libraries(test_dataobj PRIVATE
   gcmzdrops_intf
   ovbase
@@ -502,7 +503,7 @@ target_link_libraries(test_api PRIVATE
 )
 add_test(NAME test_api COMMAND test_api)
 
-add_executable(test_copy copy_test.c json.c do.c api.c drop.c file.c ini_reader.c lua.c lua_api.c luautil.c lua_script_module_param.c dataobj.c dataobj_stream.c datauri.c sniffer.c temp.c logf.c)
+add_executable(test_copy copy_test.c json.c do.c api.c drop.c file.c gcmz_file_types.c ini_reader.c lua.c lua_api.c luautil.c lua_script_module_param.c dataobj.c dataobj_stream.c datauri.c sniffer.c temp.c logf.c)
 target_link_libraries(test_copy PRIVATE
   gcmzdrops_intf
   "${LUAJIT_DLL}"

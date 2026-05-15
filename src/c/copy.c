@@ -1,5 +1,7 @@
 #include "copy.h"
 
+#include "gcmz_file_types.h"
+
 #include <ovarray.h>
 #include <ovcyrb64.h>
 #include <ovl/file.h>
@@ -151,19 +153,6 @@ static wchar_t const *get_extension_from_filename(wchar_t const *const filename)
   return dot ? dot : p;
 }
 
-static bool filename_has_suffix(wchar_t const *const filename, wchar_t const *const suffix) {
-  if (!filename || !suffix) {
-    return false;
-  }
-
-  size_t const filename_len = wcslen(filename);
-  size_t const suffix_len = wcslen(suffix);
-  if (filename_len < suffix_len) {
-    return false;
-  }
-  return ovl_path_is_same_ext(filename + filename_len - suffix_len, suffix);
-}
-
 static void uint32_to_hex8(uint32_t value, wchar_t *buf8) {
   static wchar_t const hex_chars[] = L"0123456789abcdef";
   for (int i = 7; i >= 0; i--) {
@@ -228,38 +217,8 @@ is_copy_needed(wchar_t const *const file_path, enum gcmz_processing_mode process
     return ov_indeterminate;
   }
 
-  {
-    static wchar_t const *const ignore_suffixes[] = {
-        // Files that are parsed and loaded
-        L".txt",
-        L".object",
-        L".exo",
-        // Script file types
-        L".anm",
-        L".anm2",
-        L".obj",
-        L".obj2",
-        L".cam",
-        L".cam2",
-        L".scn",
-        L".scn2",
-        L".tra",
-        L".tra2",
-        // Plugins
-        L".aui2",
-        L".aul2",
-        L".auo2",
-        L".aup2",
-        L".aux2",
-        L".au2pkg.zip",
-    };
-    wchar_t const *filename = ovl_path_extract_file_name(file_path);
-    size_t const ignore_count = sizeof(ignore_suffixes) / sizeof(ignore_suffixes[0]);
-    for (size_t i = 0; i < ignore_count; ++i) {
-      if (filename_has_suffix(filename, ignore_suffixes[i])) {
-        return ov_false;
-      }
-    }
+  if (!gcmz_is_copy_target_file(ovl_path_extract_file_name(file_path))) {
+    return ov_false;
   }
 
   switch (processing_mode) {

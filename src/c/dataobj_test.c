@@ -20,6 +20,7 @@ static void test_cleanup(void);
 
 #include "dataobj.c" // Include implementation to test internal functions
 #include "datauri.h"
+#include "gcmz_file_types.h"
 #include "temp.h"
 
 #include <ovl/file.h>
@@ -90,6 +91,17 @@ static void test_sanitize_filename(void) {
   if (!TEST_CHECK(truncated_len == expected_len)) {
     TEST_MSG("want %zu, got %zu", expected_len, truncated_len);
   }
+}
+
+static void test_virtual_file_skip_target(void) {
+  TEST_CHECK(gcmz_is_virtual_file_skip_target(L"script.anm2"));
+  TEST_CHECK(gcmz_is_virtual_file_skip_target(L"camera.CAM2"));
+  TEST_CHECK(gcmz_is_virtual_file_skip_target(L"plugin.aui2"));
+  TEST_CHECK(!gcmz_is_virtual_file_skip_target(L"package.au2pkg.zip"));
+  TEST_CHECK(!gcmz_is_virtual_file_skip_target(L"PACKAGE.AU2PKG.ZIP"));
+  TEST_CHECK(!gcmz_is_virtual_file_skip_target(L"archive.zip"));
+  TEST_CHECK(!gcmz_is_virtual_file_skip_target(L"image.png"));
+  TEST_CHECK(!gcmz_is_virtual_file_skip_target(L"document.txt"));
 }
 
 // Helper function to test extract_file_extension with given path and expected position
@@ -1002,7 +1014,7 @@ static void test_extract_from_dataobj_with_data_uri(void) {
   }
 
   // Test extraction through the main function
-  if (!TEST_SUCCEEDED(gcmz_dataobj_extract_from_dataobj(&mock->iface, file_list, &err), &err)) {
+  if (!TEST_SUCCEEDED(gcmz_dataobj_extract_from_dataobj(&mock->iface, file_list, NULL, &err), &err)) {
     return;
   }
 
@@ -1114,6 +1126,7 @@ static void test_detect_mime_type_with_sniffing(void) {
 
 TEST_LIST = {
     {"sanitize_filename", test_sanitize_filename},
+    {"virtual_file_skip_target", test_virtual_file_skip_target},
     {"extract_file_extension", test_extract_file_extension},
     {"filename_utilities_error_handling", test_filename_utilities_error_handling},
     {"create_temp_file_from_data", test_create_temp_file_from_data},

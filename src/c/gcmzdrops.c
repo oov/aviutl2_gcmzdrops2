@@ -57,6 +57,7 @@
 #include "drop.h"
 #include "error.h"
 #include "file.h"
+#include "gcmz_file_types.h"
 #include "gcmz_types.h"
 #include "ini_reader.h"
 #include "logf.h"
@@ -1212,7 +1213,12 @@ static void tray_menu_test_external_api_object(void *userdata, struct gcmz_tray_
 static bool
 extract_from_dataobj(void *dataobj, struct gcmz_file_list *dest, void *userdata, struct ov_error *const err) {
   (void)userdata;
-  if (!gcmz_dataobj_extract_from_dataobj(dataobj, dest, err)) {
+  if (!gcmz_dataobj_extract_from_dataobj(dataobj,
+                                         dest,
+                                         &(struct gcmz_dataobj_extract_options){
+                                             .should_skip_virtual_file = gcmz_is_virtual_file_skip_target,
+                                         },
+                                         err)) {
     OV_ERROR_ADD_TRACE(err);
     return false;
   }
@@ -2212,7 +2218,12 @@ void gcmzdrops_paste_from_clipboard(struct gcmzdrops *const ctx, struct aviutl2_
     OV_ERROR_ADD_TRACE(&err);
     goto cleanup;
   }
-  if (!gcmz_dataobj_extract_from_dataobj(dataobj, file_list, &err)) {
+  if (!gcmz_dataobj_extract_from_dataobj(dataobj,
+                                         file_list,
+                                         &(struct gcmz_dataobj_extract_options){
+                                             .should_skip_virtual_file = gcmz_is_virtual_file_skip_target,
+                                         },
+                                         &err)) {
     OV_ERROR_ADD_TRACE(&err);
     goto cleanup;
   }
