@@ -58,13 +58,11 @@ jobs:
           path: attestations/
           retention-days: 1
 
-  installer-and-release:
-    runs-on: windows-latest
+  release:
+    runs-on: ubuntu-latest
     needs: build
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -75,26 +73,6 @@ jobs:
         with:
           name: attestation-zip
           path: attestations/
-      - name: Install Inno Setup
-        shell: bash
-        run: |
-          # Exit code is based on lower 16 bits of HRESULT (0x8A15002B & 0xFFFF = 43)
-          # 43 = APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (already installed, no update available)
-          winget install --id JRSoftware.InnoSetup -e -s winget --accept-source-agreements --accept-package-agreements || test $? -eq 43
-      - name: Build installer
-        shell: bash
-        run: |
-          bash build.bash --skip-tests --installer
-      - name: Attest installer
-        id: attest-installer
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: "build/Release/dist/gcmzdrops_*_setup.exe"
-      - name: Prepare installer attestation
-        shell: bash
-        run: |
-          VERSION="${{ needs.build.outputs.version }}"
-          cp "${{ steps.attest-installer.outputs.bundle-path }}" "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.CREATE_RELEASE_SECRET }}
@@ -108,6 +86,4 @@ jobs:
             --title "${VERSION}" \
             --notes-file release_notes.md \
             "build/Release/dist/gcmzdrops_${VERSION}.au2pkg.zip" \
-            "build/Release/dist/gcmzdrops_${VERSION}_setup.exe" \
-            "attestations/gcmzdrops_${VERSION}.au2pkg.zip.attestation.jsonl" \
-            "attestations/gcmzdrops_${VERSION}_setup.exe.attestation.jsonl"
+            "attestations/gcmzdrops_${VERSION}.au2pkg.zip.attestation.jsonl"

@@ -16,7 +16,6 @@ REBUILD=0
 SKIP_TESTS=0
 CREATE_DOCS=0
 CREATE_ZIP=0
-CREATE_INSTALLER=0
 CMAKE_BUILD_TYPE=Release
 ARCHS="x86_64"
 USE_ADDRESS_SANITIZER=OFF
@@ -41,10 +40,6 @@ while [[ $# -gt 0 ]]; do
     -z|--zip)
       CREATE_ZIP=1
       CREATE_DOCS=1
-      shift
-      ;;
-    -i|--installer)
-      CREATE_INSTALLER=1
       shift
       ;;
     --asan)
@@ -181,8 +176,8 @@ show_test_log() {
   fi
 }
 
-# Skip normal build process if only zip or installer is requested
-if [ "${CREATE_INSTALLER}" -eq 0 ] && [ "${CREATE_ZIP}" -eq 0 ]; then
+# Skip normal build process if only zip is requested
+if [ "${CREATE_ZIP}" -eq 0 ]; then
   for arch in $ARCHS; do
     builddir="${PWD}/build/${CMAKE_BUILD_TYPE}/${arch}"
     build_log="${builddir}/build.log"
@@ -219,7 +214,7 @@ if [ "${CREATE_INSTALLER}" -eq 0 ] && [ "${CREATE_ZIP}" -eq 0 ]; then
   done
 fi
 
-if [ "${CREATE_ZIP}" -eq 1 ] || [ "${CREATE_INSTALLER}" -eq 1 ]; then
+if [ "${CREATE_ZIP}" -eq 1 ]; then
   # Generate version.env
   builddir="${PWD}/build/${CMAKE_BUILD_TYPE}/x86_64"
   version_env="${builddir}/src/c/version.env"
@@ -246,44 +241,6 @@ if [ "${CREATE_ZIP}" -eq 1 ]; then
   builddir="${PWD}/build/${CMAKE_BUILD_TYPE}/x86_64"
   zipname="gcmzdrops_${GCMZ_VERSION}.au2pkg.zip"
   (cd "${builddir}/bin" && cmake -E tar cf "${distdir}/${zipname}" --format=zip .)
-fi
-
-if [ "${CREATE_INSTALLER}" -eq 1 ]; then
-  builddir="${PWD}/build/${CMAKE_BUILD_TYPE}/x86_64"
-  installer_iss="${builddir}/installer.iss"
-
-  # Generate installer script using CMake
-  cmake \
-    -Dlocal_dir="${PWD}" \
-    -Dinput_file="${PWD}/installer.iss.in" \
-    -Doutput_file="${installer_iss}" \
-    -Dbuild_output_dir="${builddir}/bin" \
-    -Dwork_dir="${builddir}" \
-    -Doutput_dir="${distdir}" \
-    -Dversion="${GCMZ_VERSION}" \
-    -P "${PWD}/src/cmake/installer.cmake"
-
-  # Find Inno Setup compiler
-  ISCC_PATH=""
-  for path in \
-    "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-    "/c/Program Files/Inno Setup 6/ISCC.exe" \
-    "${USERPROFILE}/AppData/Local/Programs/Inno Setup 6/ISCC.exe" \
-    "$(command -v iscc 2>/dev/null || true)"; do
-    if [ -f "$path" ]; then
-      ISCC_PATH="$path"
-      break
-    fi
-  done
-
-  if [ -z "${ISCC_PATH}" ]; then
-    echo "Warning: Inno Setup compiler (ISCC.exe) not found."
-    echo "Installer script generated at: ${installer_iss}"
-    echo "You can compile it manually with Inno Setup."
-  else
-    echo "Building installer with: ${ISCC_PATH}"
-    "${ISCC_PATH}" "${installer_iss}"
-  fi
 fi
 
 echo "Build script completed."
