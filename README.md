@@ -1,4 +1,4 @@
-GCMZDrops2
+GCMZDrops2 @GCMZ_VERSION@
 ==========
 
 GCMZDrops は AviUtl ExEdit2 へのファイルドロップなどを拡張する汎用プラグインです。  

@@ -102,7 +102,9 @@ add_custom_target(${PROJECT_NAME}_generate_version_h
     -Dinput_file="${CMAKE_CURRENT_SOURCE_DIR}/version.h.in"
     -Doutput_file="${CMAKE_CURRENT_BINARY_DIR}/version.h"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/version.cmake"
-  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/version.h
+  BYPRODUCTS
+    ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    ${CMAKE_CURRENT_BINARY_DIR}/version.env
   COMMENT "Checking version information..."
 )
 
@@ -241,13 +243,38 @@ target_link_libraries(gcmzdrops PRIVATE
 
 set(GCMZ_SCRIPT_DIR "${GCMZ_PLUGIN_DIR}/${GCMZ_SCRIPT_SUBDIR}")
 set(LUA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../lua")
+set(GCMZ_PACKAGE_INI "${EXPORT_DIR}/package.ini")
+set(GCMZ_PACKAGE_TXT "${EXPORT_DIR}/package.txt")
+set(GCMZ_PLUGIN_README "${GCMZ_PLUGIN_DIR}/GCMZDrops.txt")
+function(gcmz_generate_versioned_text output_file output_dir input_file comment)
+  add_custom_command(
+    OUTPUT "${output_file}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${output_dir}"
+    COMMAND ${CMAKE_COMMAND}
+      -Dversion_env="${CMAKE_CURRENT_BINARY_DIR}/version.env"
+      -Dinput_file="${input_file}"
+      -Doutput_file="${output_file}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/generate_versioned_text.cmake"
+    DEPENDS
+      "${input_file}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/generate_versioned_text.cmake"
+      ${PROJECT_NAME}_generate_version_h
+      "${CMAKE_CURRENT_BINARY_DIR}/version.env"
+    COMMENT "${comment}"
+  )
+endfunction()
+gcmz_generate_versioned_text("${GCMZ_PACKAGE_INI}" "${EXPORT_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/package.ini.in" "Generating package.ini")
+gcmz_generate_versioned_text("${GCMZ_PACKAGE_TXT}" "${EXPORT_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/package.txt.in" "Generating package.txt")
+gcmz_generate_versioned_text("${GCMZ_PLUGIN_README}" "${GCMZ_PLUGIN_DIR}" "${CMAKE_SOURCE_DIR}/README.md" "Generating GCMZDrops.txt")
+add_custom_target(${PROJECT_NAME}_package_files ALL DEPENDS "${GCMZ_PACKAGE_INI}" "${GCMZ_PACKAGE_TXT}" "${GCMZ_PLUGIN_README}")
+add_dependencies(${PROJECT_NAME}_package_files ${PROJECT_NAME}_generate_version_h)
+add_dependencies(gcmzdrops ${PROJECT_NAME}_package_files)
 add_custom_command(TARGET gcmzdrops POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "${GCMZ_SCRIPT_DIR}"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/exo.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/entrypoint.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/ini.lua" "${GCMZ_SCRIPT_DIR}/"
   COMMAND ${CMAKE_COMMAND} -E copy "${LUA_SRC_DIR}/json.lua" "${GCMZ_SCRIPT_DIR}/"
-  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/README.md" "${GCMZ_PLUGIN_DIR}/GCMZDrops.txt"
 )
 
 add_executable(test_ini_reader ini_reader_test.c ini_reader.c)

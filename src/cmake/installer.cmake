@@ -34,7 +34,7 @@ endif()
 
 # Set paths (convert to Windows paths with backslashes for Inno Setup)
 string(REPLACE "/" "\\" GCMZ_BUILD_OUTPUT_DIR "${build_output_dir}")
-string(REPLACE "/" "\\" GCMZ_README_FILE "${local_dir}/README.md")
+string(REPLACE "/" "\\" GCMZ_README_FILE "${build_output_dir}/Plugin/GCMZDrops/GCMZDrops.txt")
 string(REPLACE "/" "\\" GCMZ_INSTALLER_OUTPUT_DIR "${output_dir}")
 if(CHINESE_SIMPLIFIED_ISL_FILE)
   string(REPLACE "/" "\\" GCMZ_CHINESE_SIMPLIFIED_ISL "${CHINESE_SIMPLIFIED_ISL_FILE}")
